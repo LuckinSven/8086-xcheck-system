@@ -52,12 +52,14 @@ def create_app() -> FastAPI:
     app = FastAPI(title="XCheck IP 信誉查询系统", version="0.1.0", lifespan=lifespan)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
+    from .api.dashboard import router as dashboard_router
     from .api.exports import router as exports_router
     from .api.result_views import router as result_views_router
     from .api.settings import router as settings_router
     from .api.tasks import router as tasks_router
     from .api.threatbook_history import router as threatbook_history_router
 
+    app.include_router(dashboard_router)
     app.include_router(tasks_router)
     app.include_router(result_views_router)
     app.include_router(threatbook_history_router)

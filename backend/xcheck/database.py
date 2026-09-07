@@ -46,6 +46,8 @@ def create_sqlite_indexes(engine: Engine) -> None:
         "ON threatbook_results(city)",
         "CREATE INDEX IF NOT EXISTS ix_xcheck_threatbook_batches_task_status "
         "ON threatbook_batches(task_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_xcheck_task_steps_name_status_task "
+        "ON task_steps(name, status, task_id)",
     )
     with engine.begin() as connection:
         for statement in statements:
