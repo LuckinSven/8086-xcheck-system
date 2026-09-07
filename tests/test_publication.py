@@ -15,6 +15,14 @@ def test_package_metadata_declares_apache_2_license():
     assert frontend["license"] == "Apache-2.0"
 
 
+def test_container_build_copies_license_files_before_installing_the_package():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    copy_position = dockerfile.index("COPY pyproject.toml LICENSE NOTICE ./")
+    install_position = dockerfile.index("RUN pip install --no-cache-dir .")
+
+    assert copy_position < install_position
+
+
 def test_readmes_embed_the_versioned_homepage_screenshot():
     for filename in ("README.md", "README.zh-CN.md"):
         readme = (ROOT / filename).read_text(encoding="utf-8")
