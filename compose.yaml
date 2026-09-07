@@ -1,0 +1,28 @@
+services:
+  xcheck:
+    build:
+      context: .
+    container_name: 8086-xcheck-system
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8086:8086"
+    environment:
+      DATA_DIR: /app/data
+      STATIC_DIR: /app/static
+      DATABASE_URL: sqlite:////app/data/xcheck.db
+      WHITELIST_API_URL: ${WHITELIST_API_URL:-http://host.docker.internal:8085/api/v1/whitelist/query}
+      THREATBOOK_API_URL: ${THREATBOOK_API_URL:-https://api.threatbook.cn/v3/scene/ip_reputation}
+      THREATBOOK_API_KEY: ${THREATBOOK_API_KEY:-}
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-524288000}
+      THREATBOOK_BATCH_SIZE: ${THREATBOOK_BATCH_SIZE:-100}
+      THREATBOOK_SAFE_IPS_PER_MINUTE: ${THREATBOOK_SAFE_IPS_PER_MINUTE:-800}
+      THREATBOOK_DAILY_BUDGET: ${THREATBOOK_DAILY_BUDGET:-10000}
+      THREATBOOK_MAX_RETRIES: ${THREATBOOK_MAX_RETRIES:-3}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
+    volumes:
+      - "./data:/app/data"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+
