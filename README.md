@@ -1,52 +1,114 @@
-# XCheck IP 信誉查询系统
+# XCheck IP Reputation Investigation System
 
-局域网内部使用的 IP 批量处理工具。支持手动 IP、攻击日志和访问日志，经流式解析、去重、查白后，按安全频率调用微步 IP 信誉 API；所有节点、错误、原文件和结果均持久化。
+[简体中文](README.zh-CN.md)
 
-## 当前地址
+XCheck is a self-hosted IP investigation workflow for trusted local networks. It accepts manual IP lists and common log files, streams and validates large inputs, removes duplicates, checks an existing whitelist service, and submits the remaining public IPs to the ThreatBook IP reputation API at a controlled rate.
 
-部署后访问：`http://服务器IP:8086`
+The application keeps the original input, task history, step checkpoints, whitelist conclusions, ThreatBook batches, diagnostics, and intelligence results in local persistent storage. A 200,000-row CSV is the current acceptance baseline.
 
-健康检查：`GET /api/health`
+## Highlights
 
-## 配置与启动
+- Three switchable live home dashboards: Overview, Threat Landscape, and Operations
+- English-first interface with complete Simplified Chinese switching in System Settings
+- Six themes, translucent surfaces, ambient light effects, and four motion levels
+- Manual, CSV, XLS, XLSX, ZIP, LOG, and JSONL input
+- Streaming parsing, IP validation, deduplication, and per-step progress
+- Whitelist filtering before any ThreatBook query
+- Explicit confirmation to remove current, historical, and inactive whitelist hits
+- Adjustable batch size, safe rate, daily budget, and retry limits
+- Server-side pagination and filtering for large ThreatBook task histories
+- Bounded dashboard aggregates that never load an entire result set into the browser
+- Localized TXT and XLSX exports at every processing stage
+- Failed-node diagnostics and resumable task checkpoints
+- Docker deployment on port `8086`
+
+## Quick start
+
+Requirements: Docker Engine with Docker Compose.
 
 ```bash
+git clone https://github.com/LuckinSven/8086-xcheck-system.git
+cd 8086-xcheck-system
 cp .env.example .env
 docker compose up -d --build
 ```
 
-默认通过 `http://host.docker.internal:8085/api/v1/whitelist/query` 调用宿主机白名单系统。启动后可在页面“系统设置”直接修改白名单 URL、微步 URL、微步 API Key，并分别执行真实连接/认证测试；`.env` 仅用于提供首次启动默认值。
+Open `http://<server-ip>:8086`. The container listens on `0.0.0.0:8086`, so hosts on the same local network can reach it when the server firewall permits the port.
 
-微步默认限制：每批 100、单并发、800 IP/分钟、本系统每日预算 10,000、最多重试 3 次。页面修改后保存到本地数据库，后续任务使用新参数；API Key 不会通过读取接口回显。
+Check service health:
 
-## 查白与微步工作流
+```bash
+curl --fail http://127.0.0.1:8086/api/health
+```
 
-任务完成查白后，详情页会显示可筛选、可分页的“查白结论”：`当前名单`、`历史名单`、`失效名单`、`未命中`和`异常`，并展示汇总、匹配信息与请求 ID。当前、历史和失效名单都属于白名单命中；有命中时，确认“一键移除白名单”后才会生成微步待查集合。
+## Initial configuration
 
-只有当每个待查 IP 都成功返回有效的`not_found`结论时，系统才会自动跳过人工移除确认并进入“等待查询微步”。任何缺失、`invalid`或未知结论都会保留为可诊断的失败状态，不会自动放行。此时可在任务详情点击“开始查询微步”，随后会进入该任务的“微步情报工作台”。
+Open **System Settings** after startup. This is the single place to configure:
 
-工作台同时适用于正在执行、额度暂停、失败/部分完成和已完成的任务：启动或重试会先持久化为排队状态，执行中的任务每 1.5 秒刷新进度；页面展示本次任务实际使用的配置快照、持久化耗时、基于有效进度样本的预计剩余时间、批次诊断和 IP 情报结果，支持导出、失败节点重试，以及按 IP、恶意状态、威胁标签、国家/省/市、严重度和可信度筛选。批次和 IP 结果均由服务端分页，适用于大批量任务，不会一次加载全部 IP。
+- Interface language: English or Simplified Chinese
+- Theme: ThreatBook Red (default), Intelligence Blue, Comfort Green, Midnight Violet, Amber Sand, or Ocean Mist
+- Homepage: Overview, Threat Landscape, or Operations
+- Motion: Off, Subtle, Medium, or Strong
+- Whitelist and ThreatBook API endpoints
+- ThreatBook API key
+- Batch size, safe IP rate, local daily budget, and retry count
 
-顶栏“微步历史”按**一次用户提交的任务**显示一条记录，不按微步内部批次拆分。历史记录可按任务中的 IP、恶意状态、标签、地区、严重度、可信度、任务状态和创建日期筛选；多个条件取交集。IP 搜索在输入停止 300 毫秒后查询，其余筛选在点击“应用筛选”后生效；筛选和分页均在服务端完成。每行只返回按频率排序的主要标签和地区及剩余数量，全局筛选选项也有上限。历史详情以明确的只读模式打开，保留检查、导出和导航，但不显示重试等修改操作。
+Both integrations have real connection tests. Test summaries retain only status, timestamp, latency, and a safe error identifier. The saved ThreatBook API key is never returned by the settings API or displayed in the interface.
 
-## 界面皮肤
+`.env` supplies first-start defaults. Settings saved through the interface are stored in the local database and take precedence on later starts.
 
-顶栏右上角可即时切换六套皮肤：微步社区红（默认）、情报蓝、护眼青绿、暗夜紫、琥珀沙金和雾海青蓝。选择结果保存在当前浏览器的本地存储中，刷新页面后自动恢复；该偏好不写入服务端数据库。
+## Whitelist and ThreatBook workflow
 
-## 输入格式
+Every task follows the same persisted sequence:
 
-- 手工：换行、空格、逗号、中文逗号或分号分隔。
-- 攻击日志：CSV、XLS、XLSX、ZIP、LOG 或 JSONL，固定读取 `srcAddress`。
-- 访问日志：CSV、XLS、XLSX、ZIP、LOG 或 JSONL，固定读取 `访问源 IP`。
-- 页面不限制文件选择器扩展名；无法识别的实际内容会在任务节点中给出可排查错误。
+1. Archive the input.
+2. Parse and validate IP addresses.
+3. Deduplicate addresses while retaining occurrence evidence.
+4. Query the whitelist service.
+5. Exclude non-public addresses.
+6. Ask the operator to remove current, historical, and inactive whitelist hits when any are found.
+7. Wait for the operator to start the ThreatBook query.
+8. Query ThreatBook in bounded batches and archive the results.
 
-单文件默认最大 500 MB；验收基线为 200,000 行 CSV。
+If no whitelist hit is found, the task advances to the ThreatBook confirmation step automatically. Missing, invalid, or unknown whitelist conclusions never bypass the gate. ThreatBook calls are not started automatically: an operator must select **Start ThreatBook query**.
 
-## 数据
+The ThreatBook workspace displays persisted progress, elapsed time, an ETA when enough progress samples exist, the task's configuration snapshot, batch evidence, recent safe diagnostics, and paginated intelligence results. Failed or partially completed work can be retried from its last checkpoint.
 
-数据库、上传原文件、导出文件、查白结论、微步批次、情报结果与任务历史均保存在 `data/`，Docker 以宿主机绑定目录映射为 `/app/data`。V1 不提供历史删除；`docker compose up -d --build`、`restart` 和 `down` 不会删除该目录。备份时复制整个 `data/`，并为永久保留的数据规划磁盘容量。
+## Input formats
 
-## 常用命令
+The upload control does not restrict a file by its displayed extension; the processing step validates the actual supported format and records a diagnosable error when it cannot parse the input.
+
+| Input type | Supported files | Recognized IP columns |
+| --- | --- | --- |
+| Attack log | CSV, XLS, XLSX, ZIP, LOG, JSONL | `srcAddress`, `Source Address`, `source_address` |
+| Access log | CSV, XLS, XLSX, ZIP, LOG, JSONL | `访问源 IP`, `Source IP`, `source_ip` |
+
+Manual input accepts new lines, spaces, commas, Chinese commas, and semicolons. IPv4 and IPv6 addresses are supported. The default single-file upload limit is 500 MB.
+
+## Exports and history
+
+Each user submission is one history record, regardless of its internal batch count. Task and ThreatBook history are filtered and paginated by the server. ThreatBook history supports IP, malicious status, threat label, country, province, city, severity, confidence, task status, and date filters.
+
+TXT and XLSX exports are available for extracted, valid, invalid, deduplicated, whitelist, post-whitelist, non-public, ThreatBook-ready, completed, malicious, high-confidence malicious, non-malicious, and failed stages. Export headings, workbook names, public-address values, and processing-stage labels follow the current global language. IPs, filenames, request identifiers, external threat labels, locations, and evidence values remain unchanged.
+
+## Data and backups
+
+`compose.yaml` binds the host `./data` directory to `/app/data`. It contains the SQLite database and uploaded source files. Normal `up`, `restart`, and `down` operations preserve this directory. Version 1 intentionally has no history-deletion feature.
+
+Back up the complete `data/` directory before upgrades. For a live SQLite backup, use a method that preserves WAL consistency; otherwise stop the container before copying `xcheck.db`, `xcheck.db-wal`, and `xcheck.db-shm`.
+
+## Security boundary
+
+XCheck intentionally has no login or role system. Only expose port `8086` to a trusted local network. Any user who can reach the service can inspect retained task data, change integration endpoints, and replace or clear the ThreatBook credential.
+
+- Never commit `.env` or `data/`.
+- Treat database and backup files as sensitive because the saved ThreatBook key is stored locally.
+- Restrict the host firewall to trusted network ranges.
+- Do not publish the service directly to the internet without adding authentication, authorization, TLS, and request protections in front of it.
+- ZIP uploads are bounded by member count and expanded size and reject path traversal.
+- Dashboard and result APIs expose allowlisted structured fields, not raw ThreatBook response JSON.
+
+## Common operations
 
 ```bash
 docker compose ps
@@ -55,4 +117,32 @@ docker compose restart
 docker compose down
 ```
 
-停止容器不会删除 `data/`。不要使用会主动删除本地目录的命令。
+Update after backing up `data/`:
+
+```bash
+git pull --ff-only
+docker compose up -d --build
+curl --fail http://127.0.0.1:8086/api/health
+```
+
+Additional operational notes are available in [docs/operations.md](docs/operations.md) (Chinese).
+
+## Development checks
+
+Backend:
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/ruff check backend tests
+PYTHONPATH=backend .venv/bin/pytest -q
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm ci
+npm test -- --run
+npm run build
+```

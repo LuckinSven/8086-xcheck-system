@@ -71,6 +71,32 @@ def test_business_type_selects_column_in_csv(tmp_path):
     assert [item.raw_value for item in iter_file_ips(access, "access", 20, 1024)] == ["1.1.1.1"]
 
 
+@pytest.mark.parametrize("header", ["访问源 IP", "Source IP", "source_ip"])
+def test_access_csv_accepts_bilingual_source_column_aliases(tmp_path, header):
+    path = tmp_path / f"access-{header.replace(' ', '-')}.csv"
+    path.write_text(f"{header},time\n1.1.1.1,now\n", encoding="utf-8")
+
+    assert [item.raw_value for item in iter_file_ips(path, "access", 20, 1024)] == ["1.1.1.1"]
+
+
+@pytest.mark.parametrize("header", ["srcAddress", "Source Address", "source_address"])
+def test_attack_jsonl_accepts_bilingual_source_column_aliases(tmp_path, header):
+    path = tmp_path / f"attack-{header.replace(' ', '-')}.jsonl"
+    path.write_text(json.dumps({header: "8.8.8.8"}) + "\n", encoding="utf-8")
+
+    assert [item.raw_value for item in iter_file_ips(path, "attack", 20, 1024)] == ["8.8.8.8"]
+
+
+def test_excel_accepts_english_source_column_alias(tmp_path):
+    path = tmp_path / "access-english.xlsx"
+    workbook = Workbook()
+    workbook.active.append(["source_ip", "time"])
+    workbook.active.append(["9.9.9.9", "now"])
+    workbook.save(path)
+
+    assert [item.raw_value for item in iter_file_ips(path, "access", 20, 1024)] == ["9.9.9.9"]
+
+
 def test_xlsx_and_xls_use_business_column(tmp_path):
     xlsx_path = tmp_path / "attack.xlsx"
     workbook = Workbook()

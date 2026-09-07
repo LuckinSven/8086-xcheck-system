@@ -29,8 +29,24 @@ def test_deduplicated_stage_exports_txt_and_xlsx(client):
     assert excel_response.status_code == 200
     workbook = load_workbook(io.BytesIO(excel_response.content), read_only=True)
     rows = list(workbook.active.values)
-    assert rows[0][:3] == ("IP", "IP版本", "出现次数")
+    assert rows[0][:3] == ("IP", "IP Version", "Occurrences")
+    assert workbook.active.title == "XCheck Export"
     assert len(rows) == 3
+
+
+def test_exports_follow_the_current_global_language(client):
+    saved = client.put("/api/settings", json={"ui_language": "zh-CN"})
+    assert saved.status_code == 200
+    task_id = client.post("/api/tasks/manual", json={"text": "8.8.8.8"}).json()["id"]
+    _wait_for_task(client, task_id)
+
+    text_response = client.get(f"/api/tasks/{task_id}/exports/deduplicated.txt")
+    assert text_response.text.splitlines()[0] == "IP\tIP版本\t出现次数\t是否公网\t阶段\t首次位置\t最后位置"
+
+    excel_response = client.get(f"/api/tasks/{task_id}/exports/deduplicated.xlsx")
+    workbook = load_workbook(io.BytesIO(excel_response.content), read_only=True)
+    assert workbook.active.title == "XCheck 导出"
+    assert next(workbook.active.values)[:3] == ("IP", "IP版本", "出现次数")
 
 
 def test_unknown_export_stage_is_rejected(client):

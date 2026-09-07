@@ -15,6 +15,9 @@ import xlrd
 from openpyxl import load_workbook
 
 EXCEL_MEMBER_MAX_BYTES = 524_288_000
+ACCESS_SOURCE_COLUMNS = ("访问源 IP", "Source IP", "source_ip")
+ATTACK_SOURCE_COLUMNS = ("srcAddress", "Source Address", "source_address")
+SourceColumns = str | tuple[str, ...]
 
 
 class ParseError(ValueError):
@@ -48,26 +51,52 @@ def _detect_encoding(stream: BinaryIO) -> str:
     raise ParseError("文件编码无法识别，支持 UTF-8、UTF-8 BOM 和 GB18030")
 
 
-def iter_csv_ips(stream: BinaryIO, source_column: str = "访问源 IP") -> Iterator[ExtractedValue]:
+def _column_aliases(source_columns: SourceColumns) -> tuple[str, ...]:
+    return (source_columns,) if isinstance(source_columns, str) else source_columns
+
+
+def _source_column_index(header: list | tuple, source_columns: SourceColumns) -> tuple[int, str]:
+    normalized = [str(value).strip() if value is not None else "" for value in header]
+    for alias in _column_aliases(source_columns):
+        if alias in normalized:
+            return normalized.index(alias), alias
+    raise LookupError
+
+
+def _missing_column_message(file_type: str, source_columns: SourceColumns) -> str:
+    return f"{file_type}缺少固定字段：{' / '.join(_column_aliases(source_columns))}"
+
+
+def iter_csv_ips(
+    stream: BinaryIO,
+    source_column: SourceColumns = ACCESS_SOURCE_COLUMNS,
+) -> Iterator[ExtractedValue]:
     encoding = _detect_encoding(stream)
     wrapper = io.TextIOWrapper(stream, encoding=encoding, newline="")
     try:
         reader = csv.DictReader(wrapper)
-        if not reader.fieldnames or source_column not in reader.fieldnames:
-            raise ParseError(f"CSV缺少固定字段：{source_column}")
+        try:
+            _column_index, selected_column = _source_column_index(
+                reader.fieldnames or [], source_column
+            )
+        except LookupError as exc:
+            raise ParseError(_missing_column_message("CSV", source_column)) from exc
         for row_number, row in enumerate(reader, start=2):
-            value = (row.get(source_column) or "").strip()
+            value = (row.get(selected_column) or "").strip()
             if value:
                 yield ExtractedValue(value, f"row:{row_number}")
             else:
-                yield ExtractedValue("", f"row:{row_number}", f"{source_column}为空")
+                yield ExtractedValue("", f"row:{row_number}", f"{selected_column}为空")
     except csv.Error as exc:
         raise ParseError(f"CSV结构错误：{exc}") from exc
     finally:
         wrapper.detach()
 
 
-def iter_jsonl_ips(stream: BinaryIO, source_column: str = "srcAddress") -> Iterator[ExtractedValue]:
+def iter_jsonl_ips(
+    stream: BinaryIO,
+    source_column: SourceColumns = ATTACK_SOURCE_COLUMNS,
+) -> Iterator[ExtractedValue]:
     encoding = _detect_encoding(stream)
     wrapper = io.TextIOWrapper(stream, encoding=encoding)
     try:
@@ -80,38 +109,48 @@ def iter_jsonl_ips(stream: BinaryIO, source_column: str = "srcAddress") -> Itera
             except json.JSONDecodeError:
                 yield ExtractedValue(raw_line[:256], f"line:{line_number}", "JSON格式错误")
                 continue
-            value = item.get(source_column) if isinstance(item, dict) else None
+            selected_column = next(
+                (
+                    alias
+                    for alias in _column_aliases(source_column)
+                    if isinstance(item, dict) and alias in item
+                ),
+                None,
+            )
+            value = item.get(selected_column) if isinstance(item, dict) and selected_column else None
             if not isinstance(value, str) or not value.strip():
-                yield ExtractedValue(raw_line[:256], f"line:{line_number}", f"缺少{source_column}")
+                expected = _column_aliases(source_column)[0]
+                yield ExtractedValue(raw_line[:256], f"line:{line_number}", f"缺少{expected}")
                 continue
             yield ExtractedValue(value.strip(), f"line:{line_number}")
     finally:
         wrapper.detach()
 
 
-def _source_column(input_type: str) -> str:
+def _source_column(input_type: str) -> tuple[str, ...]:
     if input_type == "attack":
-        return "srcAddress"
+        return ATTACK_SOURCE_COLUMNS
     if input_type in {"access", "csv"}:
-        return "访问源 IP"
+        return ACCESS_SOURCE_COLUMNS
     raise ParseError(f"不支持的日志类型：{input_type}")
 
 
-def _iter_xls_rows(workbook, source_column: str) -> Iterator[ExtractedValue]:
+def _iter_xls_rows(workbook, source_column: SourceColumns) -> Iterator[ExtractedValue]:
     try:
         sheet = workbook.sheet_by_index(0)
         if sheet.nrows == 0:
             raise ParseError("Excel文件没有表头")
-        header = [str(sheet.cell_value(0, index)).strip() for index in range(sheet.ncols)]
-        if source_column not in header:
-            raise ParseError(f"Excel缺少固定字段：{source_column}")
-        column_index = header.index(source_column)
+        header = [sheet.cell_value(0, index) for index in range(sheet.ncols)]
+        try:
+            column_index, selected_column = _source_column_index(header, source_column)
+        except LookupError as exc:
+            raise ParseError(_missing_column_message("Excel", source_column)) from exc
         for row_index in range(1, sheet.nrows):
             value = str(sheet.cell_value(row_index, column_index)).strip()
             if value:
                 yield ExtractedValue(value, f"row:{row_index + 1}")
             else:
-                yield ExtractedValue("", f"row:{row_index + 1}", f"{source_column}为空")
+                yield ExtractedValue("", f"row:{row_index + 1}", f"{selected_column}为空")
     finally:
         workbook.release_resources()
 
@@ -119,7 +158,7 @@ def _iter_xls_rows(workbook, source_column: str) -> Iterator[ExtractedValue]:
 def iter_excel_ips(
     stream: BinaryIO,
     suffix: str,
-    source_column: str,
+    source_column: SourceColumns,
     source_path: Path | None = None,
 ) -> Iterator[ExtractedValue]:
     if suffix == ".xlsx":
@@ -128,13 +167,14 @@ def iter_excel_ips(
             sheet = workbook.active
             rows = sheet.iter_rows(values_only=True)
             header = next(rows, None)
-            if not header or source_column not in header:
-                raise ParseError(f"Excel缺少固定字段：{source_column}")
-            column_index = header.index(source_column)
+            try:
+                column_index, selected_column = _source_column_index(header or (), source_column)
+            except LookupError as exc:
+                raise ParseError(_missing_column_message("Excel", source_column)) from exc
             for row_number, row in enumerate(rows, start=2):
                 value = row[column_index] if column_index < len(row) else None
                 if value is None or not str(value).strip():
-                    yield ExtractedValue("", f"row:{row_number}", f"{source_column}为空")
+                    yield ExtractedValue("", f"row:{row_number}", f"{selected_column}为空")
                 else:
                     yield ExtractedValue(str(value).strip(), f"row:{row_number}")
         finally:
