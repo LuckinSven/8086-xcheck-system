@@ -1,10 +1,65 @@
+export interface ApiProblem {
+  code: string
+  fallback: string
+  params: Record<string, string | number>
+}
+
+export class ApiError extends Error {
+  readonly code: string
+  readonly fallback: string
+  readonly params: Record<string, string | number>
+
+  constructor(readonly status: number, problem: ApiProblem) {
+    super(problem.fallback)
+    this.name = 'ApiError'
+    this.code = problem.code
+    this.fallback = problem.fallback
+    this.params = problem.params
+  }
+}
+
+function isApiProblem(value: unknown): value is ApiProblem {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<ApiProblem>
+  return typeof candidate.code === 'string'
+    && typeof candidate.fallback === 'string'
+    && !!candidate.params
+    && typeof candidate.params === 'object'
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init)
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({ detail: `请求失败：${response.status}` }))
-    throw new Error(payload.detail || `请求失败：${response.status}`)
+    const payload: unknown = await response.json().catch(() => null)
+    const detail = payload && typeof payload === 'object'
+      ? (payload as { detail?: unknown }).detail
+      : null
+    const problem: ApiProblem = isApiProblem(detail)
+      ? detail
+      : {
+          code: 'request.failed',
+          fallback: typeof detail === 'string'
+            ? detail
+            : `Request failed with status ${response.status}.`,
+          params: { status: response.status },
+        }
+    throw new ApiError(response.status, problem)
   }
   return response.json() as Promise<T>
+}
+
+export type TranslationFunction = (
+  key: string,
+  params?: Record<string, string | number>,
+) => string
+
+export function translateApiError(value: unknown, translate: TranslationFunction): string {
+  if (value instanceof ApiError) {
+    const key = `errors.${value.code}`
+    const translated = translate(key, value.params)
+    return translated === key ? value.fallback : translated
+  }
+  return value instanceof Error ? value.message : translate('errors.request.failed')
 }
 
 export const api = {
@@ -31,4 +86,3 @@ export const api = {
     return request<T>(path, { method: 'POST', body: form })
   },
 }
-

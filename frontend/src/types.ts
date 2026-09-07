@@ -173,3 +173,37 @@ export interface TaskDiagnostics {
     unresolved_count: number
   }>
 }
+
+export type UiLanguage = 'en-US' | 'zh-CN'
+export type HomepageMode = 'overview' | 'landscape' | 'operations'
+export type MotionIntensity = 'off' | 'subtle' | 'medium' | 'strong'
+
+export interface DisplaySettings {
+  ui_language: UiLanguage
+  theme_id: import('./theme').ThemeId
+  homepage_mode: HomepageMode
+  motion_intensity: MotionIntensity
+}
+
+export interface IntegrationTestSummary {
+  status: 'untested' | 'success' | 'failed'
+  tested_at: string | null
+  latency_ms: number | null
+  error_code: string | null
+  fallback: string | null
+}
+
+export interface SystemSettings extends DisplaySettings {
+  whitelist_api_url: string
+  threatbook_api_url: string
+  threatbook_api_key_configured: boolean
+  upload_max_bytes: number
+  threatbook_batch_size: number
+  threatbook_safe_ips_per_minute: number
+  threatbook_daily_budget: number
+  threatbook_max_retries: number
+  integration_tests: {
+    whitelist: IntegrationTestSummary
+    threatbook: IntegrationTestSummary
+  }
+}
