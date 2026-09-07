@@ -3,6 +3,7 @@
 [简体中文](README.zh-CN.md)
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/LuckinSven/8086-xcheck-system)](https://github.com/LuckinSven/8086-xcheck-system/releases/latest)
 
 XCheck is a self-hosted IP investigation workflow for trusted local networks. It accepts manual IP lists and common log files, streams and validates large inputs, removes duplicates, checks an existing whitelist service, and submits the remaining public IPs to the ThreatBook IP reputation API at a controlled rate.
 
@@ -36,8 +37,11 @@ Requirements: Docker Engine with Docker Compose.
 git clone https://github.com/LuckinSven/8086-xcheck-system.git
 cd 8086-xcheck-system
 cp .env.example .env
-docker compose up -d --build
+docker compose pull
+docker compose up -d --no-build
 ```
+
+The published image is `ghcr.io/luckinsven/8086-xcheck-system:latest`. To build from source instead, run `docker compose up -d --build`.
 
 Open `http://<server-ip>:8086`. The container listens on `0.0.0.0:8086`, so hosts on the same local network can reach it when the server firewall permits the port.
 
@@ -127,9 +131,12 @@ Update after backing up `data/`:
 
 ```bash
 git pull --ff-only
-docker compose up -d --build
+docker compose pull
+docker compose up -d --no-build
 curl --fail http://127.0.0.1:8086/api/health
 ```
+
+Use `XCHECK_IMAGE_TAG=v0.1.0 docker compose up -d --no-build` to pin a specific release. Version tags automatically publish matching multi-architecture images and a GitHub Release.
 
 Additional operational notes are available in [docs/operations.md](docs/operations.md) (Chinese).
 

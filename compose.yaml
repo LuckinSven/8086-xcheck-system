@@ -1,5 +1,6 @@
 services:
   xcheck:
+    image: ghcr.io/luckinsven/8086-xcheck-system:${XCHECK_IMAGE_TAG:-latest}
     build:
       context: .
     container_name: 8086-xcheck-system
@@ -25,4 +26,3 @@ services:
       - "host.docker.internal:host-gateway"
     security_opt:
       - no-new-privileges:true
-

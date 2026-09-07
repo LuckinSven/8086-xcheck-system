@@ -3,6 +3,7 @@
 [English](README.md)
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![最新版本](https://img.shields.io/github/v/release/LuckinSven/8086-xcheck-system)](https://github.com/LuckinSven/8086-xcheck-system/releases/latest)
 
 XCheck 是面向可信局域网、自托管部署的 IP 排查工作流。系统支持手动 IP 和常见日志文件，以流式方式解析大体量输入，完成校验、去重和查白，再按照安全速率将剩余公网 IP 提交到微步 IP 信誉接口。
 
@@ -36,8 +37,11 @@ XCheck 是面向可信局域网、自托管部署的 IP 排查工作流。系统
 git clone https://github.com/LuckinSven/8086-xcheck-system.git
 cd 8086-xcheck-system
 cp .env.example .env
-docker compose up -d --build
+docker compose pull
+docker compose up -d --no-build
 ```
+
+公开镜像地址为 `ghcr.io/luckinsven/8086-xcheck-system:latest`。如果需要从源码构建，请改用 `docker compose up -d --build`。
 
 访问 `http://<服务器IP>:8086`。容器监听 `0.0.0.0:8086`，服务器防火墙放行该端口后，同一局域网内的设备可以访问。
 
@@ -127,9 +131,12 @@ docker compose down
 
 ```bash
 git pull --ff-only
-docker compose up -d --build
+docker compose pull
+docker compose up -d --no-build
 curl --fail http://127.0.0.1:8086/api/health
 ```
+
+如需锁定特定版本，可运行 `XCHECK_IMAGE_TAG=v0.1.0 docker compose up -d --no-build`。每次推送版本标签都会自动发布对应的多架构镜像和 GitHub Release。
 
 更多说明参见 [docs/operations.md](docs/operations.md)。
 
