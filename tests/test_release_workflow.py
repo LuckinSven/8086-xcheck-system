@@ -26,9 +26,11 @@ def test_release_workflow_builds_amd64_image_and_creates_release():
     build_step = next(step for step in steps if step.get("id") == "build-and-push")
     release_step = next(step for step in steps if step.get("id") == "create-release")
 
-    assert any(item.startswith("docker/login-action@") for item in uses)
-    assert any(item.startswith("docker/metadata-action@") for item in uses)
-    assert any(item.startswith("docker/build-push-action@") for item in uses)
+    assert "actions/checkout@v7" in uses
+    assert "docker/setup-buildx-action@v4" in uses
+    assert "docker/login-action@v4" in uses
+    assert "docker/metadata-action@v6" in uses
+    assert "docker/build-push-action@v7" in uses
     assert build_step["with"]["push"] == "true"
     assert build_step["with"]["platforms"] == "linux/amd64"
     assert "type=semver,pattern={{version}}" in metadata_step["with"]["tags"]
