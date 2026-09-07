@@ -176,7 +176,24 @@ def test_start_threatbook_requires_backend_api_key(client):
     task_id = client.post("/api/tasks/manual", json={"text": "8.8.8.8"}).json()["id"]
     response = client.post(f"/api/tasks/{task_id}/actions/start-threatbook")
     assert response.status_code == 409
-    assert "API Key" in response.json()["detail"]
+    assert response.json()["detail"]["code"] == "integration.threatbook.api_key_required"
+
+
+def test_start_and_retry_failures_return_structured_problems(client):
+    missing = client.get("/api/tasks/does-not-exist")
+    start = client.post("/api/tasks/does-not-exist/actions/start-threatbook")
+    retry = client.post("/api/tasks/does-not-exist/steps/threatbook_query/retry")
+
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == {
+        "code": "task.not_found",
+        "fallback": "The task does not exist.",
+        "params": {"task_id": "does-not-exist"},
+    }
+    assert start.status_code == 409
+    assert start.json()["detail"]["code"] == "integration.threatbook.api_key_required"
+    assert retry.status_code == 404
+    assert retry.json()["detail"]["code"] == "task.not_found"
 
 
 def test_uploaded_original_file_can_be_downloaded(client):

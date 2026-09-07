@@ -3,11 +3,13 @@ from pathlib import Path
 from threading import RLock
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
 from sqlalchemy import select, text
 
 from .config import get_settings
 from .database import Base, create_database_engine, create_sqlite_indexes, make_session_factory
+from .errors import validation_exception_handler
 from .worker import TaskWorker
 
 
@@ -48,6 +50,7 @@ def create_app() -> FastAPI:
         engine.dispose()
 
     app = FastAPI(title="XCheck IP 信誉查询系统", version="0.1.0", lifespan=lifespan)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
     from .api.exports import router as exports_router
     from .api.result_views import router as result_views_router

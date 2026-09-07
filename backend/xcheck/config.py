@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     ] = "threatbook-red"
     homepage_mode: Literal["overview", "landscape", "operations"] = "overview"
     motion_intensity: Literal["off", "subtle", "medium", "strong"] = "medium"
+    whitelist_test_summary: str = "{}"
+    threatbook_test_summary: str = "{}"
 
 
 @lru_cache

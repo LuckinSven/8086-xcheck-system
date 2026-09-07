@@ -1,14 +1,25 @@
+import json
 import time
+from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from pydantic import AnyHttpUrl, BaseModel, Field
 
+from xcheck.errors import raise_api_problem
 from xcheck.models import Setting
-from xcheck.services.threatbook import ThreatBookClient, safe_integration_error
+from xcheck.services.threatbook import ThreatBookClient
 from xcheck.services.whitelist import WhitelistClient
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+_EMPTY_TEST_SUMMARY = {
+    "status": "untested",
+    "tested_at": None,
+    "latency_ms": None,
+    "error_code": None,
+    "fallback": None,
+}
 
 
 class SettingsUpdate(BaseModel):
@@ -33,6 +44,30 @@ class SettingsUpdate(BaseModel):
     motion_intensity: Literal["off", "subtle", "medium", "strong"] | None = None
 
 
+def _safe_test_summary(raw_value: str) -> dict:
+    try:
+        value = json.loads(raw_value)
+    except (TypeError, json.JSONDecodeError):
+        return dict(_EMPTY_TEST_SUMMARY)
+    if not isinstance(value, dict) or value.get("status") not in {"success", "failed"}:
+        return dict(_EMPTY_TEST_SUMMARY)
+
+    def bounded_text(field: str, limit: int) -> str | None:
+        candidate = value.get(field)
+        return candidate[:limit] if isinstance(candidate, str) else None
+
+    latency_ms = value.get("latency_ms")
+    return {
+        "status": value["status"],
+        "tested_at": bounded_text("tested_at", 64),
+        "latency_ms": latency_ms
+        if isinstance(latency_ms, int) and 0 <= latency_ms <= 3_600_000
+        else None,
+        "error_code": bounded_text("error_code", 128),
+        "fallback": bounded_text("fallback", 240),
+    }
+
+
 def _payload(settings) -> dict:
     return {
         "whitelist_api_url": settings.whitelist_api_url,
@@ -47,7 +82,44 @@ def _payload(settings) -> dict:
         "theme_id": settings.theme_id,
         "homepage_mode": settings.homepage_mode,
         "motion_intensity": settings.motion_intensity,
+        "integration_tests": {
+            "whitelist": _safe_test_summary(settings.whitelist_test_summary),
+            "threatbook": _safe_test_summary(settings.threatbook_test_summary),
+        },
     }
+
+
+def _save_test_summary(
+    request: Request,
+    integration: Literal["whitelist", "threatbook"],
+    *,
+    status: Literal["success", "failed"],
+    latency_ms: int,
+    error_code: str | None = None,
+    fallback: str | None = None,
+) -> None:
+    summary = json.dumps(
+        {
+            "status": status,
+            "tested_at": datetime.now(UTC).isoformat(),
+            "latency_ms": max(0, latency_ms),
+            "error_code": error_code,
+            "fallback": fallback,
+        },
+        separators=(",", ":"),
+    )
+    key = f"{integration}_test_summary"
+    with request.app.state.settings_lock:
+        with request.app.state.session_factory() as session:
+            setting = session.get(Setting, key)
+            if setting is None:
+                session.add(Setting(key=key, value=summary))
+            else:
+                setting.value = summary
+            session.commit()
+        new_settings = request.app.state.settings.model_copy(update={key: summary}, deep=True)
+        request.app.state.settings = new_settings
+        request.app.state.worker.apply_runtime_settings(new_settings)
 
 
 @router.get("")
@@ -105,13 +177,36 @@ def test_whitelist_connection(request: Request):
         )
         result_code = result.get("result_code") if result else None
         if result_code not in {"active", "reference", "inactive", "not_found", "invalid"}:
-            raise ValueError("白名单API返回结构不正确")
+            raise ValueError("invalid response")
     except Exception as exc:
-        raise HTTPException(502, f"白名单接口测试失败：{safe_integration_error(exc)}") from exc
+        latency_ms = round((time.perf_counter() - started) * 1000)
+        code = (
+            "integration.whitelist.invalid_response"
+            if isinstance(exc, ValueError)
+            else "integration.whitelist.test_failed"
+        )
+        fallback = (
+            "The whitelist API returned an invalid response."
+            if isinstance(exc, ValueError)
+            else "Whitelist API connection test failed."
+        )
+        _save_test_summary(
+            request,
+            "whitelist",
+            status="failed",
+            latency_ms=latency_ms,
+            error_code=code,
+            fallback=fallback,
+        )
+        raise_api_problem(502, code, fallback)
+    latency_ms = round((time.perf_counter() - started) * 1000)
+    _save_test_summary(request, "whitelist", status="success", latency_ms=latency_ms)
     return {
         "ok": True,
-        "message": f"白名单接口可用，测试结果：{result_code}",
-        "latency_ms": round((time.perf_counter() - started) * 1000),
+        "code": "integration.whitelist.test_succeeded",
+        "fallback": "Whitelist API is available.",
+        "params": {"result_code": result_code},
+        "latency_ms": latency_ms,
     }
 
 
@@ -120,7 +215,16 @@ def test_threatbook_connection(request: Request):
     with request.app.state.settings_lock:
         settings = request.app.state.settings.model_copy(deep=True)
     if not settings.threatbook_api_key:
-        raise HTTPException(409, "请先保存微步 API Key")
+        fallback = "Save the ThreatBook API key before testing the integration."
+        _save_test_summary(
+            request,
+            "threatbook",
+            status="failed",
+            latency_ms=0,
+            error_code="integration.threatbook.api_key_required",
+            fallback=fallback,
+        )
+        raise_api_problem(409, "integration.threatbook.api_key_required", fallback)
     started = time.perf_counter()
     try:
         payload = ThreatBookClient(
@@ -130,11 +234,25 @@ def test_threatbook_connection(request: Request):
         response_code = int(payload.get("response_code", -999))
         if response_code < 0:
             raise RuntimeError(payload.get("verbose_msg") or f"微步错误码 {response_code}")
-    except Exception as exc:
-        safe_message = safe_integration_error(exc, settings.threatbook_api_key)
-        raise HTTPException(502, f"微步认证测试失败：{safe_message}") from exc
+    except Exception:
+        latency_ms = round((time.perf_counter() - started) * 1000)
+        code = "integration.threatbook.test_failed"
+        fallback = "ThreatBook API authentication test failed."
+        _save_test_summary(
+            request,
+            "threatbook",
+            status="failed",
+            latency_ms=latency_ms,
+            error_code=code,
+            fallback=fallback,
+        )
+        raise_api_problem(502, code, fallback)
+    latency_ms = round((time.perf_counter() - started) * 1000)
+    _save_test_summary(request, "threatbook", status="success", latency_ms=latency_ms)
     return {
         "ok": True,
-        "message": "微步接口与 API Key 认证成功",
-        "latency_ms": round((time.perf_counter() - started) * 1000),
+        "code": "integration.threatbook.test_succeeded",
+        "fallback": "ThreatBook API authentication succeeded.",
+        "params": {},
+        "latency_ms": latency_ms,
     }

@@ -3,6 +3,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi.testclient import TestClient
+from xcheck.models import Setting
 
 
 def _complete_settings(**overrides):
@@ -107,6 +108,15 @@ def test_invalid_display_setting_does_not_change_saved_fields(client):
     assert saved["theme_id"] == "eye-care"
     assert saved["homepage_mode"] == "landscape"
     assert saved["motion_intensity"] == "subtle"
+
+
+def test_invalid_setting_returns_structured_validation_problem(client):
+    response = client.put("/api/settings", json={"ui_language": "fr-FR"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "request.validation_failed"
+    assert response.json()["detail"]["fallback"] == "The request contains invalid values."
+    assert response.json()["detail"]["params"]["field"] == "ui_language"
 
 
 def test_ip_diagnostics_contains_source_and_stage(client):
@@ -227,6 +237,33 @@ def test_whitelist_authentication_probe_uses_saved_url(client, monkeypatch):
     assert captured == {"url": "http://whitelist.test/api/query", "addresses": ["8.8.8.8"]}
 
 
+def test_whitelist_probe_persists_only_a_safe_success_summary(client, app, monkeypatch):
+    class FakeWhitelistClient:
+        def __init__(self, _url):
+            pass
+
+        def query(self, _addresses):
+            return {
+                "request_id": "private-response-id",
+                "results": [{"query": "8.8.8.8", "result_code": "not_found"}],
+            }
+
+    monkeypatch.setattr("xcheck.api.settings.WhitelistClient", FakeWhitelistClient)
+    response = client.post("/api/settings/test-whitelist")
+
+    assert response.status_code == 200
+    summary = client.get("/api/settings").json()["integration_tests"]["whitelist"]
+    assert summary["status"] == "success"
+    assert summary["tested_at"]
+    assert isinstance(summary["latency_ms"], int)
+    assert summary["error_code"] is None
+    assert summary["fallback"] is None
+    with app.state.session_factory() as session:
+        stored = session.get(Setting, "whitelist_test_summary").value
+    assert "8.8.8.8" not in stored
+    assert "private-response-id" not in stored
+
+
 def test_whitelist_probe_rejects_result_without_matching_verdict(client, monkeypatch):
     class MalformedWhitelistClient:
         def __init__(self, _url):
@@ -239,7 +276,7 @@ def test_whitelist_probe_rejects_result_without_matching_verdict(client, monkeyp
     response = client.post("/api/settings/test-whitelist")
 
     assert response.status_code == 502
-    assert "返回结构" in response.json()["detail"]
+    assert response.json()["detail"]["code"] == "integration.whitelist.invalid_response"
 
 
 def test_threatbook_authentication_probe_is_safe(client, monkeypatch):
@@ -281,7 +318,36 @@ def test_probe_failure_never_leaks_api_key(client, monkeypatch):
 
     assert response.status_code == 502
     assert "new-secret-key" not in response.text
-    assert "***" in response.json()["detail"]
+    assert response.json()["detail"]["code"] == "integration.threatbook.test_failed"
+
+
+def test_failed_threatbook_probe_persists_safe_structured_problem(client, app, monkeypatch):
+    class FailingThreatBookClient:
+        def __init__(self, _url, _api_key):
+            pass
+
+        def query(self, _addresses):
+            raise RuntimeError("private upstream body for 8.8.8.8 and new-secret-key")
+
+    monkeypatch.setattr("xcheck.api.settings.ThreatBookClient", FailingThreatBookClient)
+    client.put("/api/settings", json=_complete_settings())
+    response = client.post("/api/settings/test-threatbook")
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == {
+        "code": "integration.threatbook.test_failed",
+        "fallback": "ThreatBook API authentication test failed.",
+        "params": {},
+    }
+    summary = client.get("/api/settings").json()["integration_tests"]["threatbook"]
+    assert summary["status"] == "failed"
+    assert summary["error_code"] == "integration.threatbook.test_failed"
+    assert summary["fallback"] == "ThreatBook API authentication test failed."
+    with app.state.session_factory() as session:
+        stored = session.get(Setting, "threatbook_test_summary").value
+    assert "8.8.8.8" not in stored
+    assert "new-secret-key" not in stored
+    assert "private upstream body" not in stored
 
 
 def test_probe_failure_redacts_percent_encoded_api_key(client, monkeypatch):

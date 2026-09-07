@@ -6,11 +6,12 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, update
 
+from xcheck.errors import raise_api_problem
 from xcheck.models import (
     StepAttempt,
     StepStatus,
@@ -90,7 +91,12 @@ async def create_upload(
             size += len(chunk)
             if size > request.app.state.settings.upload_max_bytes:
                 path.unlink(missing_ok=True)
-                raise HTTPException(413, "上传文件超过500 MB限制")
+                raise_api_problem(
+                    413,
+                    "task.upload_too_large",
+                    "The uploaded file exceeds the 500 MB limit.",
+                    limit_mb=500,
+                )
             output.write(chunk)
     task_id = create_file_task(
         request.app.state.session_factory,
@@ -124,7 +130,7 @@ def get_task(task_id: str, request: Request):
     with request.app.state.session_factory() as session:
         task = session.get(Task, task_id)
         if task is None:
-            raise HTTPException(404, "任务不存在")
+            raise_api_problem(404, "task.not_found", "The task does not exist.", task_id=task_id)
         payload = _task_payload(task)
         payload["threatbook_config"] = _safe_threatbook_config(task.config_snapshot)
         payload["invalid_count"] = task.invalid_count
@@ -153,12 +159,22 @@ def download_original(task_id: str, request: Request):
     with request.app.state.session_factory() as session:
         task = session.get(Task, task_id)
         if task is None:
-            raise HTTPException(404, "任务不存在")
+            raise_api_problem(404, "task.not_found", "The task does not exist.", task_id=task_id)
         if not task.stored_path:
-            raise HTTPException(404, "手动输入任务没有原始文件")
+            raise_api_problem(
+                404,
+                "task.original_not_available",
+                "Manual-entry tasks do not have an original file.",
+                task_id=task_id,
+            )
         path = Path(task.stored_path)
         if not path.is_file():
-            raise HTTPException(404, "原始文件不存在")
+            raise_api_problem(
+                404,
+                "task.original_file_missing",
+                "The original file is no longer available.",
+                task_id=task_id,
+            )
         return FileResponse(path, filename=Path(task.original_filename or "original").name)
 
 
@@ -172,7 +188,7 @@ def task_diagnostics(
     with request.app.state.session_factory() as session:
         task = session.get(Task, task_id)
         if task is None:
-            raise HTTPException(404, "任务不存在")
+            raise_api_problem(404, "task.not_found", "The task does not exist.", task_id=task_id)
         attempt_total = session.scalar(
             select(func.count()).select_from(StepAttempt).where(StepAttempt.task_id == task_id)
         ) or 0
@@ -255,19 +271,37 @@ def retry_step(task_id: str, step_name: str, request: Request):
     with request.app.state.session_factory() as session:
         task = session.get(Task, task_id)
         if task is None:
-            raise HTTPException(404, "任务不存在")
+            raise_api_problem(404, "task.not_found", "The task does not exist.", task_id=task_id)
         if task.status not in {TaskStatus.FAILED.value, TaskStatus.PARTIAL_SUCCESS.value}:
-            raise HTTPException(409, "只有失败或部分成功任务可以重试")
+            raise_api_problem(
+                409,
+                "task.retry_invalid_state",
+                "Only failed or partially successful tasks can be retried.",
+                status=task.status,
+            )
         step = session.scalar(select(TaskStep).where(TaskStep.task_id == task_id, TaskStep.name == step_name))
         if step is None:
-            raise HTTPException(404, "任务节点不存在")
+            raise_api_problem(
+                404,
+                "task.step_not_found",
+                "The requested task step does not exist.",
+                step_name=step_name,
+            )
         if step_name == "threatbook_query":
             if not request.app.state.settings.threatbook_api_key:
-                raise HTTPException(409, "后端尚未配置微步 API Key")
+                raise_api_problem(
+                    409,
+                    "integration.threatbook.api_key_required",
+                    "The ThreatBook API key has not been configured.",
+                )
             try:
                 parse_threatbook_execution_config(task.config_snapshot)
-            except ValueError as exc:
-                raise HTTPException(409, str(exc)) from exc
+            except ValueError:
+                raise_api_problem(
+                    409,
+                    "task.threatbook_config_invalid",
+                    "The saved ThreatBook execution settings are invalid.",
+                )
         claim_values = {"status": TaskStatus.QUEUED.value, "error_summary": None}
         if step_name == "threatbook_query":
             claim_values["current_step"] = "threatbook_query"
@@ -281,7 +315,12 @@ def retry_step(task_id: str, step_name: str, request: Request):
         )
         if claimed.rowcount != 1:
             session.rollback()
-            raise HTTPException(409, "任务已被其他请求领取")
+            raise_api_problem(
+                409,
+                "task.claim_conflict",
+                "Another request has already claimed this task.",
+                task_id=task_id,
+            )
         step.status = StepStatus.PENDING.value
         step.error_summary = None
         step.finished_at = None
@@ -298,25 +337,43 @@ def retry_step(task_id: str, step_name: str, request: Request):
 def remove_whitelist(task_id: str, request: Request):
     try:
         task = confirm_removal(request.app.state.session_factory, task_id)
-    except ValueError as exc:
-        raise HTTPException(409, str(exc)) from exc
+    except ValueError:
+        raise_api_problem(
+            409,
+            "task.whitelist_action_invalid",
+            "Whitelist removal is not available for this task.",
+            task_id=task_id,
+        )
     return _task_payload(task)
 
 
 @router.post("/{task_id}/actions/start-threatbook", status_code=202)
 def start_threatbook(task_id: str, request: Request):
     if not request.app.state.settings.threatbook_api_key:
-        raise HTTPException(409, "后端尚未配置微步 API Key")
+        raise_api_problem(
+            409,
+            "integration.threatbook.api_key_required",
+            "The ThreatBook API key has not been configured.",
+        )
     with request.app.state.session_factory() as session:
         task = session.get(Task, task_id)
         if task is None:
-            raise HTTPException(404, "任务不存在")
+            raise_api_problem(404, "task.not_found", "The task does not exist.", task_id=task_id)
         if task.status not in {"waiting_threatbook_confirmation", "paused_quota"}:
-            raise HTTPException(409, "任务尚未进入微步查询阶段")
+            raise_api_problem(
+                409,
+                "task.threatbook_not_ready",
+                "The task has not reached the ThreatBook query stage.",
+                status=task.status,
+            )
         try:
             parse_threatbook_execution_config(task.config_snapshot)
-        except ValueError as exc:
-            raise HTTPException(409, str(exc)) from exc
+        except ValueError:
+            raise_api_problem(
+                409,
+                "task.threatbook_config_invalid",
+                "The saved ThreatBook execution settings are invalid.",
+            )
         claimed = session.execute(
             update(Task)
             .where(
@@ -327,7 +384,12 @@ def start_threatbook(task_id: str, request: Request):
         )
         if claimed.rowcount != 1:
             session.rollback()
-            raise HTTPException(409, "任务已被其他请求领取")
+            raise_api_problem(
+                409,
+                "task.claim_conflict",
+                "Another request has already claimed this task.",
+                task_id=task_id,
+            )
         session.commit()
         session.refresh(task)
         payload = _task_payload(task)
@@ -378,7 +440,13 @@ def ip_diagnostics(task_id: str, ip_id: int, request: Request):
     with request.app.state.session_factory() as session:
         item = session.scalar(select(TaskIP).where(TaskIP.task_id == task_id, TaskIP.id == ip_id))
         if item is None:
-            raise HTTPException(404, "IP记录不存在")
+            raise_api_problem(
+                404,
+                "task.ip_not_found",
+                "The IP record does not exist.",
+                task_id=task_id,
+                ip_id=ip_id,
+            )
         whitelist = session.scalar(select(WhitelistResult).where(WhitelistResult.task_ip_id == item.id))
         threatbook = session.scalar(select(ThreatbookResult).where(ThreatbookResult.task_ip_id == item.id))
         return {
