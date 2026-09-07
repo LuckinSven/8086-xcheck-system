@@ -4,6 +4,5 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [vue()],
   server: { proxy: { '/api': 'http://127.0.0.1:8086' } },
-  test: { environment: 'jsdom' },
+  test: { environment: 'jsdom', setupFiles: ['./src/test-setup.ts'] },
 })
-

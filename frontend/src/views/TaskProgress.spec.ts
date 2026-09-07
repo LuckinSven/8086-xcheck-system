@@ -70,11 +70,11 @@ describe('Task progress whitelist conclusions', () => {
 
     const { wrapper } = await mountPage(fetchMock)
 
-    expect(wrapper.text()).toContain('查白结论')
-    expect(wrapper.text()).toContain('命中 1')
-    expect(wrapper.text()).toContain('未命中 1')
-    expect(wrapper.text()).toContain('异常 1')
-    expect(wrapper.text()).toContain('当前名单')
+    expect(wrapper.text()).toContain('Whitelist conclusions')
+    expect(wrapper.text()).toContain('Hits 1')
+    expect(wrapper.text()).toContain('Not found 1')
+    expect(wrapper.text()).toContain('Errors 1')
+    expect(wrapper.text()).toContain('Current list')
     expect(wrapper.text()).toContain('当前条目')
     expect(wrapper.text()).toContain('req-1')
     expect(fetchMock).toHaveBeenCalledWith('/api/tasks/task-123/whitelist-results?page=1&page_size=50', undefined)
@@ -93,8 +93,8 @@ describe('Task progress whitelist conclusions', () => {
 
     const { wrapper } = await mountPage(fetchMock)
 
-    expect(wrapper.text()).toContain('没有白名单命中')
-    expect(wrapper.text()).toContain('已自动进入微步待查集合')
+    expect(wrapper.text()).toContain('No whitelist hits were found')
+    expect(wrapper.text()).toContain('advanced automatically')
   })
 
   it('requests filtered and paginated whitelist conclusions from the server and replaces the rendered rows', async () => {

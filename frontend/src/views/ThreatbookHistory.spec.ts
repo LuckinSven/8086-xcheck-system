@@ -110,13 +110,13 @@ describe('ThreatBook history', () => {
     expect(rows[0].text()).toContain('+2')
     expect(rows[0].get('a[href="/tasks/task-alpha/threatbook?mode=history"]')).toBeTruthy()
     expect(rows[1].get('a[href="/tasks/task-beta/threatbook?mode=history"]')).toBeTruthy()
-    expect(wrapper.get('th:nth-child(3)').text()).toBe('待查询总数')
+    expect(wrapper.get('th:nth-child(3)').text()).toBe('Total queued')
 
-    expect(wrapper.get('[aria-label="严重度筛选"]').text()).toContain('critical-from-api')
-    expect(wrapper.get('[aria-label="可信度筛选"]').text()).toContain('medium-from-api')
-    expect(wrapper.get('[aria-label="威胁标签筛选"]').text()).toContain('botnet')
-    expect(wrapper.get('[aria-label="任务状态筛选"]').text()).toContain('等待移除白名单')
-    expect(wrapper.get('[aria-label="任务状态筛选"]').text()).toContain('等待查询微步')
+    expect(wrapper.get('[aria-label="Severity filter"]').text()).toContain('critical-from-api')
+    expect(wrapper.get('[aria-label="Confidence filter"]').text()).toContain('medium-from-api')
+    expect(wrapper.get('[aria-label="Threat label filter"]').text()).toContain('botnet')
+    expect(wrapper.get('[aria-label="Task status filter"]').text()).toContain('Awaiting whitelist removal')
+    expect(wrapper.get('[aria-label="Task status filter"]').text()).toContain('Awaiting ThreatBook query')
   })
 
   it('sends all submitted select and date filters to the server and clears them', async () => {
@@ -124,17 +124,17 @@ describe('ThreatBook history', () => {
     const fetchMock = baseFetch((path) => path === filteredUrl ? jsonResponse({ ...firstPage, items: [historyItems[0]], total: 1 }) : undefined)
     const { wrapper } = await mountPage(fetchMock)
 
-    await wrapper.get('[aria-label="IP 搜索"]').setValue('9.9')
-    await wrapper.get('[aria-label="恶意状态筛选"]').setValue('true')
-    await wrapper.get('[aria-label="威胁标签筛选"]').setValue('phishing')
-    await wrapper.get('[aria-label="国家筛选"]').setValue('中国')
-    await wrapper.get('[aria-label="省份筛选"]').setValue('北京')
-    await wrapper.get('[aria-label="城市筛选"]').setValue('海淀')
-    await wrapper.get('[aria-label="严重度筛选"]').setValue('critical-from-api')
-    await wrapper.get('[aria-label="可信度筛选"]').setValue('high-from-api')
-    await wrapper.get('[aria-label="任务状态筛选"]').setValue('completed')
-    await wrapper.get('[aria-label="开始日期"]').setValue('2026-08-01')
-    await wrapper.get('[aria-label="结束日期"]').setValue('2026-08-14')
+    await wrapper.get('[aria-label="IP search"]').setValue('9.9')
+    await wrapper.get('[aria-label="Malicious status filter"]').setValue('true')
+    await wrapper.get('[aria-label="Threat label filter"]').setValue('phishing')
+    await wrapper.get('[aria-label="Country filter"]').setValue('中国')
+    await wrapper.get('[aria-label="Province filter"]').setValue('北京')
+    await wrapper.get('[aria-label="City filter"]').setValue('海淀')
+    await wrapper.get('[aria-label="Severity filter"]').setValue('critical-from-api')
+    await wrapper.get('[aria-label="Confidence filter"]').setValue('high-from-api')
+    await wrapper.get('[aria-label="Task status filter"]').setValue('completed')
+    await wrapper.get('[aria-label="Start date"]').setValue('2026-08-01')
+    await wrapper.get('[aria-label="End date"]').setValue('2026-08-14')
     await wrapper.get('form.history-filters').trigger('submit')
     await flushPromises()
 
@@ -144,7 +144,7 @@ describe('ThreatBook history', () => {
     await wrapper.get('button.clear-history-filters').trigger('click')
     await flushPromises()
     expect(fetchMock).toHaveBeenLastCalledWith('/api/threatbook/history?page=1&page_size=20', undefined)
-    expect((wrapper.get('[aria-label="IP 搜索"]').element as HTMLInputElement).value).toBe('')
+    expect((wrapper.get('[aria-label="IP search"]').element as HTMLInputElement).value).toBe('')
   })
 
   it('debounces IP searches and ignores an older response that finishes last', async () => {
@@ -160,12 +160,12 @@ describe('ThreatBook history', () => {
     })
     const { wrapper } = await mountPage(fetchMock)
 
-    await wrapper.get('[aria-label="IP 搜索"]').setValue('1.1')
+    await wrapper.get('[aria-label="IP search"]').setValue('1.1')
     await vi.advanceTimersByTimeAsync(299)
     expect(fetchMock).not.toHaveBeenCalledWith('/api/threatbook/history?q=1.1&page=1&page_size=20', undefined)
     await vi.advanceTimersByTimeAsync(1)
 
-    await wrapper.get('[aria-label="IP 搜索"]').setValue('2.2')
+    await wrapper.get('[aria-label="IP search"]').setValue('2.2')
     await vi.advanceTimersByTimeAsync(300)
     resolveNewer(jsonResponse({ ...firstPage, items: [{ ...historyItems[1], source_name: 'newer.xlsx' }], total: 1 }))
     await flushPromises()
@@ -190,7 +190,7 @@ describe('ThreatBook history', () => {
     })
     const { wrapper } = await mountPage(fetchMock)
 
-    await wrapper.get('[aria-label="IP 搜索"]').setValue('3.3')
+    await wrapper.get('[aria-label="IP search"]').setValue('3.3')
     resolveUnfiltered(jsonResponse({ ...firstPage, items: [{ ...historyItems[0], source_name: 'older-unfiltered.xlsx' }], total: 1 }))
     await flushPromises()
 
@@ -215,8 +215,8 @@ describe('ThreatBook history', () => {
     })
     const { wrapper } = await mountPage(fetchMock)
 
-    await wrapper.get('[aria-label="IP 搜索"]').setValue('4.4')
-    await wrapper.get('[aria-label="微步历史分页"] button:last-child').trigger('click')
+    await wrapper.get('[aria-label="IP search"]').setValue('4.4')
+    await wrapper.get('[aria-label="ThreatBook history pagination"] button:last-child').trigger('click')
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledWith(secondPageUrl, undefined)
     expect(wrapper.text()).toContain('filtered-page-2.xlsx')
@@ -234,12 +234,12 @@ describe('ThreatBook history', () => {
       : undefined)
     const { wrapper } = await mountPage(fetchMock)
 
-    await wrapper.get('[aria-label="微步历史分页"] button:last-child').trigger('click')
+    await wrapper.get('[aria-label="ThreatBook history pagination"] button:last-child').trigger('click')
     await flushPromises()
 
     expect(fetchMock).toHaveBeenCalledWith(secondPageUrl, undefined)
     expect(wrapper.text()).toContain('page-2.csv')
-    expect(wrapper.text()).toContain('第 2 / 2 页')
+    expect(wrapper.text()).toContain('Page 2 / 2')
   })
 
   it('keeps current rows visible and exposes a busy state while updating', async () => {
@@ -248,19 +248,19 @@ describe('ThreatBook history', () => {
     const fetchMock = baseFetch((path) => path === '/api/threatbook/history?page=2&page_size=20' ? secondPage : undefined)
     const { wrapper } = await mountPage(fetchMock)
 
-    await wrapper.get('[aria-label="微步历史分页"] button:last-child').trigger('click')
+    await wrapper.get('[aria-label="ThreatBook history pagination"] button:last-child').trigger('click')
 
     expect(wrapper.get('.threatbook-history-panel').attributes('aria-busy')).toBe('true')
-    expect(wrapper.text()).toContain('正在更新微步历史…')
+    expect(wrapper.text()).toContain('Updating ThreatBook history…')
     expect(wrapper.text()).toContain('alpha.xlsx')
     expect(wrapper.get('form.history-filters button[type="submit"]').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('button.clear-history-filters').attributes()).toHaveProperty('disabled')
-    expect(wrapper.get('[aria-label="微步历史分页"] button:last-child').attributes()).toHaveProperty('disabled')
+    expect(wrapper.get('[aria-label="ThreatBook history pagination"] button:last-child').attributes()).toHaveProperty('disabled')
 
     resolveSecondPage(jsonResponse({ ...firstPage, page: 2, items: [{ ...historyItems[1], source_name: 'updated.xlsx' }] }))
     await flushPromises()
     expect(wrapper.get('.threatbook-history-panel').attributes('aria-busy')).toBe('false')
-    expect(wrapper.text()).not.toContain('正在更新微步历史…')
+    expect(wrapper.text()).not.toContain('Updating ThreatBook history…')
     expect(wrapper.text()).toContain('updated.xlsx')
   })
 
@@ -270,7 +270,7 @@ describe('ThreatBook history', () => {
       : undefined)
     const { wrapper } = await mountPage(fetchMock)
 
-    expect(wrapper.text()).toContain('没有符合筛选条件的微步任务')
+    expect(wrapper.text()).toContain('No ThreatBook tasks match these filters')
     expect(wrapper.find('table').exists()).toBe(false)
   })
 

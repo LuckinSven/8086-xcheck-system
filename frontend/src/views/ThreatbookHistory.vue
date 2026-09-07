@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
-import { api } from '../api'
+import { api, translateApiError } from '../api'
 import type {
   Page,
   ThreatbookFilterOptions,
@@ -24,6 +25,7 @@ const page = ref(1)
 const loading = ref(true)
 const error = ref('')
 const optionsError = ref('')
+const { t, locale } = useI18n()
 
 const emptyFilters = () => ({
   q: '',
@@ -45,30 +47,17 @@ let requestSerial = 0
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 
-const statusText: Record<string, string> = {
-  queued: '排队中',
-  running: '查询中',
-  waiting_whitelist_confirmation: '等待移除白名单',
-  waiting_threatbook_confirmation: '等待查询微步',
-  paused_quota: '额度暂停',
-  partial_success: '部分完成',
-  failed: '失败',
-  completed: '已完成',
+function statusText(status: string) {
+  const key = `statuses.${status}`
+  const translated = t(key)
+  return translated === key ? status : translated
 }
 
-const statusOptions = [
-  ['queued', '排队中'],
-  ['running', '查询中'],
-  ['waiting_whitelist_confirmation', '等待移除白名单'],
-  ['waiting_threatbook_confirmation', '等待查询微步'],
-  ['paused_quota', '额度暂停'],
-  ['partial_success', '部分完成'],
-  ['failed', '失败'],
-  ['completed', '已完成'],
-]
+const statusOptions = ['queued', 'running', 'waiting_whitelist_confirmation',
+  'waiting_threatbook_confirmation', 'paused_quota', 'partial_success', 'failed', 'completed']
 
 function formatTime(value: string | null) {
-  return value ? new Date(value).toLocaleString('zh-CN') : '—'
+  return value ? new Date(value).toLocaleString(locale.value, { hour12: false }) : '—'
 }
 
 function queryPath(targetPage: number) {
@@ -108,7 +97,7 @@ async function loadHistory(targetPage = 1) {
     items.value = []
     total.value = 0
     page.value = targetPage
-    error.value = caught instanceof Error ? caught.message : '微步历史加载失败'
+    error.value = translateApiError(caught, t)
   } finally {
     if (currentRequest === requestSerial) loading.value = false
   }
@@ -118,7 +107,7 @@ async function loadOptions() {
   try {
     options.value = await api.get<ThreatbookFilterOptions>('/api/threatbook/filter-options')
   } catch (caught) {
-    optionsError.value = caught instanceof Error ? caught.message : '筛选选项加载失败'
+    optionsError.value = translateApiError(caught, t)
   }
 }
 
@@ -169,81 +158,81 @@ onBeforeUnmount(() => {
   <section class="page-head threatbook-history-head">
     <div>
       <span class="kicker">THREATBOOK ARCHIVE</span>
-      <h2>微步历史</h2>
-      <p>每次用户提交只保留一条记录，筛选和翻页均由服务端完成。</p>
+      <h2>{{ t('common.threatbookHistory') }}</h2>
+      <p>{{ t('threatbookHistory.description') }}</p>
     </div>
-    <div class="capacity"><b>{{ total }}</b><span>微步任务</span></div>
+    <div class="capacity"><b>{{ total }}</b><span>{{ t('threatbookHistory.tasks') }}</span></div>
   </section>
 
   <section class="panel history-filter-panel">
     <form class="history-filters" @submit.prevent="submitFilters">
       <input
         v-model="filters.q"
-        aria-label="IP 搜索"
+        :aria-label="t('threatbookHistory.ipSearch')"
         autocomplete="off"
-        placeholder="搜索任务中的 IP"
+        :placeholder="t('threatbookHistory.searchPlaceholder')"
         @input="scheduleIpSearch"
       >
-      <select v-model="filters.malicious" aria-label="恶意状态筛选">
-        <option value="">全部恶意状态</option>
-        <option value="true">包含恶意</option>
-        <option value="false">包含非恶意</option>
+      <select v-model="filters.malicious" :aria-label="t('threatbookHistory.maliciousFilter')">
+        <option value="">{{ t('threatbookHistory.allMalicious') }}</option>
+        <option value="true">{{ t('threatbookHistory.containsMalicious') }}</option>
+        <option value="false">{{ t('threatbookHistory.containsNonMalicious') }}</option>
       </select>
-      <select v-model="filters.judgment" aria-label="威胁标签筛选">
-        <option value="">全部威胁标签</option>
+      <select v-model="filters.judgment" :aria-label="t('threatbookHistory.labelFilter')">
+        <option value="">{{ t('threatbookHistory.allLabels') }}</option>
         <option v-for="label in options.labels" :key="label" :value="label">{{ label }}</option>
       </select>
-      <select v-model="filters.country" aria-label="国家筛选">
-        <option value="">全部国家</option>
+      <select v-model="filters.country" :aria-label="t('threatbookHistory.countryFilter')">
+        <option value="">{{ t('threatbookHistory.allCountries') }}</option>
         <option v-for="country in options.countries" :key="country" :value="country">{{ country }}</option>
       </select>
-      <select v-model="filters.province" aria-label="省份筛选">
-        <option value="">全部省份</option>
+      <select v-model="filters.province" :aria-label="t('threatbookHistory.provinceFilter')">
+        <option value="">{{ t('threatbookHistory.allProvinces') }}</option>
         <option v-for="province in options.provinces" :key="province" :value="province">{{ province }}</option>
       </select>
-      <select v-model="filters.city" aria-label="城市筛选">
-        <option value="">全部城市</option>
+      <select v-model="filters.city" :aria-label="t('threatbookHistory.cityFilter')">
+        <option value="">{{ t('threatbookHistory.allCities') }}</option>
         <option v-for="city in options.cities" :key="city" :value="city">{{ city }}</option>
       </select>
-      <select v-model="filters.severity" aria-label="严重度筛选">
-        <option value="">全部严重度</option>
+      <select v-model="filters.severity" :aria-label="t('threatbookHistory.severityFilter')">
+        <option value="">{{ t('threatbookHistory.allSeverities') }}</option>
         <option v-for="severity in options.severities" :key="severity" :value="severity">{{ severity }}</option>
       </select>
-      <select v-model="filters.confidence" aria-label="可信度筛选">
-        <option value="">全部可信度</option>
+      <select v-model="filters.confidence" :aria-label="t('threatbookHistory.confidenceFilter')">
+        <option value="">{{ t('threatbookHistory.allConfidence') }}</option>
         <option v-for="confidence in options.confidence_levels" :key="confidence" :value="confidence">{{ confidence }}</option>
       </select>
-      <select v-model="filters.status" aria-label="任务状态筛选">
-        <option value="">全部任务状态</option>
-        <option v-for="status in statusOptions" :key="status[0]" :value="status[0]">{{ status[1] }}</option>
+      <select v-model="filters.status" :aria-label="t('threatbookHistory.statusFilter')">
+        <option value="">{{ t('threatbookHistory.allStatuses') }}</option>
+        <option v-for="status in statusOptions" :key="status" :value="status">{{ statusText(status) }}</option>
       </select>
-      <label><span>开始日期</span><input v-model="filters.date_from" aria-label="开始日期" type="date"></label>
-      <label><span>结束日期</span><input v-model="filters.date_to" aria-label="结束日期" type="date"></label>
+      <label><span>{{ t('threatbookHistory.startDate') }}</span><input v-model="filters.date_from" :aria-label="t('threatbookHistory.startDate')" type="date"></label>
+      <label><span>{{ t('threatbookHistory.endDate') }}</span><input v-model="filters.date_to" :aria-label="t('threatbookHistory.endDate')" type="date"></label>
       <div class="history-filter-actions">
-        <button class="primary" type="submit" :disabled="loading">应用筛选</button>
-        <button class="button ghost clear-history-filters" type="button" :disabled="loading" @click="clearFilters">清空</button>
+        <button class="primary" type="submit" :disabled="loading">{{ t('common.applyFilters') }}</button>
+        <button class="button ghost clear-history-filters" type="button" :disabled="loading" @click="clearFilters">{{ t('common.clear') }}</button>
       </div>
     </form>
-    <p v-if="optionsError" class="filter-options-error">筛选选项暂未完整加载：{{ optionsError }}</p>
+    <p v-if="optionsError" class="filter-options-error">{{ t('threatbookHistory.optionsPartial') }}: {{ optionsError }}</p>
   </section>
 
   <section class="panel table-panel threatbook-history-panel" :aria-busy="loading">
-    <div v-if="loading && items.length" class="history-updating" role="status" aria-live="polite">正在更新微步历史…</div>
+    <div v-if="loading && items.length" class="history-updating" role="status" aria-live="polite">{{ t('threatbookHistory.updating') }}</div>
     <div v-if="error" class="error-banner">{{ error }}</div>
-    <div v-else-if="loading && !items.length" class="empty">正在读取微步历史…</div>
-    <div v-else-if="!items.length" class="empty">没有符合筛选条件的微步任务</div>
+    <div v-else-if="loading && !items.length" class="empty">{{ t('threatbookHistory.loading') }}</div>
+    <div v-else-if="!items.length" class="empty">{{ t('threatbookHistory.empty') }}</div>
     <div v-else class="history-table-wrap">
       <table>
         <thead>
           <tr>
-            <th>任务 / 来源</th><th>状态</th><th>待查询总数</th><th>完成</th><th>失败</th><th>恶意</th>
-            <th>主要威胁标签</th><th>主要地区</th><th>开始 / 完成</th><th></th>
+            <th>{{ t('threatbookHistory.taskSource') }}</th><th>{{ t('task.status') }}</th><th>{{ t('threatbookHistory.readyTotal') }}</th><th>{{ t('statuses.completed') }}</th><th>{{ t('statuses.failed') }}</th><th>{{ t('common.malicious') }}</th>
+            <th>{{ t('threatbookHistory.primaryLabels') }}</th><th>{{ t('threatbookHistory.primaryRegions') }}</th><th>{{ t('threatbookHistory.startFinish') }}</th><th></th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="item in items" :key="item.task_id">
             <td><code>{{ item.task_id.slice(0, 8) }}</code><small>{{ item.source_name }}</small></td>
-            <td><span class="status" :class="item.status">{{ statusText[item.status] || item.status }}</span></td>
+            <td><span class="status" :class="item.status">{{ statusText(item.status) }}</span></td>
             <td>{{ item.ready_count }}</td>
             <td>{{ item.completed_count }}</td>
             <td>{{ item.failed_count }}</td>
@@ -263,16 +252,16 @@ onBeforeUnmount(() => {
               </div>
             </td>
             <td class="history-times"><span>{{ formatTime(item.started_at) }}</span><span>{{ formatTime(item.finished_at) }}</span></td>
-            <td><RouterLink class="text-link" :to="{ path: `/tasks/${item.task_id}/threatbook`, query: { mode: 'history' } }">查看微步详情 →</RouterLink></td>
+            <td><RouterLink class="text-link" :to="{ path: `/tasks/${item.task_id}/threatbook`, query: { mode: 'history' } }">{{ t('threatbookHistory.viewDetails') }} →</RouterLink></td>
           </tr>
         </tbody>
       </table>
     </div>
-    <div v-if="total > 0" class="history-pagination" aria-label="微步历史分页">
-      <span>第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 条</span>
+    <div v-if="total > 0" class="history-pagination" :aria-label="t('threatbookHistory.pagination')">
+      <span>{{ t('task.pageSummary', { page, pages: totalPages, total }) }}</span>
       <div class="pagination">
-        <button class="button ghost" type="button" :disabled="loading || page <= 1" @click="changePage(page - 1)">上一页</button>
-        <button class="button ghost" type="button" :disabled="loading || page >= totalPages" @click="changePage(page + 1)">下一页</button>
+        <button class="button ghost" type="button" :disabled="loading || page <= 1" @click="changePage(page - 1)">{{ t('common.previous') }}</button>
+        <button class="button ghost" type="button" :disabled="loading || page >= totalPages" @click="changePage(page + 1)">{{ t('common.next') }}</button>
       </div>
     </div>
   </section>

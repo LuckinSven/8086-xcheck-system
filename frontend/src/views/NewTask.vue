@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
-import { api } from '../api'
+import { api, translateApiError } from '../api'
 import type { TaskSummary } from '../types'
 
 const router = useRouter()
+const { t } = useI18n()
 const mode = ref<'manual' | 'attack' | 'access'>('manual')
 const text = ref('')
 const file = ref<File | null>(null)
@@ -24,12 +26,12 @@ async function submit() {
     if (mode.value === 'manual') {
       task = await api.post<TaskSummary>('/api/tasks/manual', { text: text.value })
     } else {
-      if (!file.value) throw new Error('请选择需要处理的文件')
+      if (!file.value) throw new Error(t('newTask.selectFileError'))
       task = await api.upload<TaskSummary>(`/api/tasks/upload?input_type=${mode.value}`, file.value)
     }
     await router.push(`/tasks/${task.id}`)
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : '创建任务失败'
+    error.value = translateApiError(reason, t)
   } finally {
     busy.value = false
   }
@@ -38,32 +40,32 @@ async function submit() {
 
 <template>
   <section class="page-head">
-    <div><span class="kicker">NEW INVESTIGATION</span><h2>创建 IP 排查任务</h2><p>输入 IP 或上传日志，系统将依次去重、查白并查询微步。</p></div>
-    <div class="capacity"><b>20 万行</b><span>CSV 容量基线</span></div>
+    <div><span class="kicker">NEW INVESTIGATION</span><h2>{{ t('newTask.title') }}</h2><p>{{ t('newTask.description') }}</p></div>
+    <div class="capacity"><b>200,000</b><span>{{ t('newTask.capacity') }}</span></div>
   </section>
   <section class="panel intake-panel">
     <div class="mode-tabs" role="tablist">
-      <button :class="{ active: mode === 'manual' }" @click="mode = 'manual'">手动输入</button>
-      <button :class="{ active: mode === 'attack' }" @click="mode = 'attack'">攻击日志</button>
-      <button :class="{ active: mode === 'access' }" @click="mode = 'access'">访问日志</button>
+      <button :class="{ active: mode === 'manual' }" @click="mode = 'manual'">{{ t('newTask.manual') }}</button>
+      <button :class="{ active: mode === 'attack' }" @click="mode = 'attack'">{{ t('newTask.attackLog') }}</button>
+      <button :class="{ active: mode === 'access' }" @click="mode = 'access'">{{ t('newTask.accessLog') }}</button>
     </div>
     <div v-if="mode === 'manual'" class="input-block">
-      <label for="ips">待查询 IP</label>
-      <textarea id="ips" v-model="text" placeholder="支持换行、空格、逗号或分号分隔&#10;例如：8.8.8.8&#10;2001:4860:4860::8888"></textarea>
-      <small>自动校验 IPv4 / IPv6，并统计重复出现次数。</small>
+      <label for="ips">{{ t('newTask.addresses') }}</label>
+      <textarea id="ips" v-model="text" :placeholder="t('newTask.placeholder')"></textarea>
+      <small>{{ t('newTask.validationHint') }}</small>
     </div>
     <div v-else class="upload-zone">
       <input type="file" @change="selectFile" />
-      <b>{{ file?.name || '点击选择或拖入文件' }}</b>
-      <span v-if="mode === 'attack'">攻击日志读取 srcAddress 字段</span>
-      <span v-else>访问日志读取“访问源 IP”字段</span>
-      <small>CSV / XLS / XLSX / ZIP / LOG / JSONL · 最大 500 MB · 原文件永久存档</small>
+      <b>{{ file?.name || t('newTask.chooseFile') }}</b>
+      <span v-if="mode === 'attack'">{{ t('newTask.attackFieldHint') }}</span>
+      <span v-else>{{ t('newTask.accessFieldHint') }}</span>
+      <small>{{ t('newTask.fileHint') }}</small>
     </div>
     <p v-if="error" class="error-banner">{{ error }}</p>
     <div class="form-footer">
-      <div class="flow-hint"><span>提取</span><i>→</i><span>去重</span><i>→</i><span>查白</span><i>→</i><span>微步</span></div>
+      <div class="flow-hint"><span>{{ t('newTask.extract') }}</span><i>→</i><span>{{ t('newTask.deduplicate') }}</span><i>→</i><span>{{ t('newTask.whitelist') }}</span><i>→</i><span>ThreatBook</span></div>
       <button class="primary" :disabled="busy || (mode === 'manual' ? !text.trim() : !file)" @click="submit">
-        {{ busy ? '正在创建…' : '创建并开始处理' }}
+        {{ t(busy ? 'newTask.creating' : 'newTask.create') }}
       </button>
     </div>
   </section>

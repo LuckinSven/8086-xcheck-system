@@ -9,4 +9,6 @@ import './styles.css'
 
 applyUiSettings(DEFAULT_DISPLAY_SETTINGS)
 createApp(App).use(createPinia()).use(i18n).use(router).mount('#app')
-void loadUiSettings()
+void loadUiSettings().catch(() => {
+  // The English defaults remain usable while the backend is temporarily unavailable.
+})

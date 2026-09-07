@@ -134,28 +134,28 @@ describe('ThreatBook workspace', () => {
   it('renders persisted progress, batch evidence, safe execution settings, and intelligence fields', async () => {
     const { wrapper } = await mountPage()
 
-    expect(wrapper.text()).toContain('微步情报工作台')
+    expect(wrapper.text()).toContain('ThreatBook Intelligence Workspace')
     const metrics = wrapper.findAll('.threatbook-stats article')
     expect(metrics[1].get('b').text()).toBe('50')
     expect(metrics[2].get('b').text()).toBe('150')
     expect(metrics[3].get('b').text()).toBe('2')
     expect(metrics[4].get('b').text()).toBe('7')
     expect(wrapper.text()).toContain('25%')
-    expect(wrapper.text()).toContain('当前批次 1 / 4')
-    expect(wrapper.text()).toContain('批大小 50')
-    expect(wrapper.text()).toContain('安全速率 600 IP/分钟')
-    expect(wrapper.text()).toContain('每日预算 10000')
-    expect(wrapper.text()).toContain('最大重试 3')
+    expect(wrapper.text()).toContain('Current batch 1 / 4')
+    expect(wrapper.text()).toContain('Batch size 50')
+    expect(wrapper.text()).toContain('Safe rate 600 IPs/minute')
+    expect(wrapper.text()).toContain('Daily budget 10000')
+    expect(wrapper.text()).toContain('Maximum retries 3')
     expect(wrapper.text()).not.toContain('must-not-render')
 
     expect(wrapper.text()).toContain('微步接口请求完成')
     expect(wrapper.text()).toContain('48')
-    expect(wrapper.text()).toContain('botnet、scanner')
+    expect(wrapper.text()).toContain('botnet, scanner')
     expect(wrapper.text()).toContain('美国 / 加利福尼亚 / 山景城')
     expect(wrapper.text()).toContain('Google')
     expect(wrapper.text()).toContain('AS15169 · GOOGLE')
     expect(wrapper.text()).toContain('IDC')
-    expect(wrapper.get('a[href="/tasks/task-123/ips/91"]').text()).toContain('排查')
+    expect(wrapper.get('a[href="/tasks/task-123/ips/91"]').text()).toContain('Investigate')
     expect(wrapper.get('a[href="https://x.threatbook.com/v5/ip/8.8.8.8"]').attributes('rel')).toContain('noopener')
   })
 
@@ -173,14 +173,14 @@ describe('ThreatBook workspace', () => {
     })
     const { wrapper } = await mountPage(fetchMock)
 
-    await wrapper.get('[aria-label="IP 搜索"]').setValue('9.9')
-    await wrapper.get('[aria-label="恶意状态"]').setValue('true')
-    await wrapper.get('[aria-label="威胁标签"]').setValue('phishing')
-    await wrapper.get('[aria-label="国家"]').setValue('中国')
-    await wrapper.get('[aria-label="省份"]').setValue('北京')
-    await wrapper.get('[aria-label="城市"]').setValue('海淀')
-    await wrapper.get('[aria-label="严重度"]').setValue('high')
-    await wrapper.get('[aria-label="可信度"]').setValue('high')
+    await wrapper.get('[aria-label="IP search"]').setValue('9.9')
+    await wrapper.get('[aria-label="Malicious status"]').setValue('true')
+    await wrapper.get('[aria-label="Threat label"]').setValue('phishing')
+    await wrapper.get('[aria-label="Country"]').setValue('中国')
+    await wrapper.get('[aria-label="Province"]').setValue('北京')
+    await wrapper.get('[aria-label="City"]').setValue('海淀')
+    await wrapper.get('[aria-label="Severity"]').setValue('high')
+    await wrapper.get('[aria-label="Confidence"]').setValue('high')
     await wrapper.get('form.result-filters').trigger('submit')
     await flushPromises()
 
@@ -189,7 +189,7 @@ describe('ThreatBook workspace', () => {
     expect(wrapper.text()).toContain('9.9.9.9')
     expect(wrapper.text()).not.toContain('8.8.8.8')
 
-    await wrapper.get('[aria-label="情报结果分页"] button:last-child').trigger('click')
+    await wrapper.get('[aria-label="Intelligence result pagination"] button:last-child').trigger('click')
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledWith(firstUrl.replace('page=1', 'page=2'), undefined)
     expect(wrapper.text()).toContain('4.4.4.4')
@@ -236,10 +236,10 @@ describe('ThreatBook workspace', () => {
     })
     const { wrapper } = await mountPage(fetchMock)
 
-    expect(wrapper.text()).toContain('微步情报工作台')
+    expect(wrapper.text()).toContain('ThreatBook Intelligence Workspace')
     expect(wrapper.text()).toContain('8.8.8.8')
     expect(wrapper.text()).toContain('批次服务暂时不可用')
-    expect(wrapper.text()).toContain('批次明细暂未加载')
+    expect(wrapper.text()).toContain('Batch details are unavailable')
   })
 
   it('keeps existing export and polls a successful retry through waiting and running', async () => {
@@ -315,9 +315,9 @@ describe('ThreatBook workspace', () => {
     })
     const { wrapper } = await mountPage(fetchMock)
 
-    await wrapper.get('[aria-label="IP 搜索"]').setValue('old')
+    await wrapper.get('[aria-label="IP search"]').setValue('old')
     await wrapper.get('form.result-filters').trigger('submit')
-    await wrapper.get('[aria-label="IP 搜索"]').setValue('new')
+    await wrapper.get('[aria-label="IP search"]').setValue('new')
     await wrapper.get('form.result-filters').trigger('submit')
     resolveNewResults(jsonResponse({ ...results, items: [{ ...results.items[0], id: 20, ip: '2.2.2.2' }] }))
     await flushPromises()
@@ -343,7 +343,7 @@ describe('ThreatBook workspace', () => {
     })
     const { wrapper: batchWrapper } = await mountPage(batchFetch)
     await vi.advanceTimersByTimeAsync(1500)
-    await batchWrapper.get('[aria-label="批次分页"] button:last-child').trigger('click')
+    await batchWrapper.get('[aria-label="Batch pagination"] button:last-child').trigger('click')
     resolvePageTwo(jsonResponse({ ...batches, total: 21, page: 2, items: [{ ...batches.items[0], id: 'batch-new', batch_number: 21 }] }))
     await flushPromises()
     resolveOldBatch(jsonResponse({ ...batches, total: 21, items: [{ ...batches.items[0], id: 'batch-old', batch_number: 1 }] }))
@@ -358,7 +358,7 @@ describe('ThreatBook workspace', () => {
     const fetchMock = baseFetch()
     const { wrapper } = await mountPage(fetchMock)
 
-    await wrapper.get('[aria-label="IP 搜索"]').setValue('draft-only')
+    await wrapper.get('[aria-label="IP search"]').setValue('draft-only')
     await vi.advanceTimersByTimeAsync(1500)
     await flushPromises()
 
@@ -387,12 +387,12 @@ describe('ThreatBook workspace', () => {
     })
     const { wrapper } = await mountPage(fetchMock)
 
-    expect(wrapper.text()).toContain('已用时间 1 分钟')
-    expect(wrapper.text()).toContain('预计剩余 计算中')
+    expect(wrapper.text()).toContain('Elapsed 1 min')
+    expect(wrapper.text()).toContain('Estimated remaining Calculating')
 
     await vi.advanceTimersByTimeAsync(1500)
     await flushPromises()
-    expect(wrapper.text()).toContain('预计剩余 约 6 秒')
+    expect(wrapper.text()).toContain('Estimated remaining About 6 sec')
   })
 
   it('opens history detail in read-only mode without mutation controls', async () => {
@@ -408,7 +408,7 @@ describe('ThreatBook workspace', () => {
     })
     const { wrapper } = await mountPage(fetchMock, '/tasks/task-123/threatbook?mode=history')
 
-    expect(wrapper.text()).toContain('历史只读')
+    expect(wrapper.text()).toContain('Read-only history')
     expect(wrapper.find('button.retry-threatbook').exists()).toBe(false)
     expect(wrapper.get('a[href="/api/tasks/task-123/exports/threatbook_complete.xlsx"]')).toBeTruthy()
     expect(wrapper.get('a[href="/tasks/task-123/ips/91?mode=history"]')).toBeTruthy()
@@ -434,7 +434,7 @@ describe('ThreatBook workspace', () => {
     const { wrapper } = await mountPage(fetchMock)
 
     expect(fetchMock).toHaveBeenCalledWith('/api/tasks/task-123/diagnostics?attempt_limit=50&batch_limit=50', undefined)
-    expect(wrapper.get('a[href="#batch-attempts-batch-failed"]').text()).toContain('2 条尝试')
+    expect(wrapper.get('a[href="#batch-attempts-batch-failed"]').text()).toContain('2 attempts')
     expect(wrapper.get('#batch-attempts-batch-failed').text()).toContain('安全错误')
     expect(wrapper.get('#batch-attempts-batch-failed').text()).toContain('仍然失败')
   })

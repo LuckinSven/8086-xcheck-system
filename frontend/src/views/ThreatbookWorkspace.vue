@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
-import { api } from '../api'
+import { api, translateApiError } from '../api'
 import type { Page, Step, TaskDiagnostics, TaskSummary, ThreatbookBatch, ThreatbookResult } from '../types'
 
 const route = useRoute()
+const { t, locale } = useI18n()
 const taskId = route.params.id as string
 const task = ref<TaskSummary | null>(null)
 const batches = ref<Page<ThreatbookBatch> | null>(null)
@@ -44,8 +46,8 @@ const batchPages = computed(() => batches.value ? Math.max(1, Math.ceil(batches.
 const resultPages = computed(() => results.value ? Math.max(1, Math.ceil(results.value.total / results.value.page_size)) : 1)
 const visibleErrors = computed(() => Object.values(loadErrors).filter(Boolean))
 
-function message(reason: unknown, fallback: string) {
-  return reason instanceof Error ? reason.message : fallback
+function sectionError(labelKey: string, reason: unknown) {
+  return `${t(labelKey)}: ${translateApiError(reason, t)}`
 }
 
 function batchUrl(page: number) {
@@ -84,7 +86,7 @@ async function loadDiagnostics(currentTask: TaskSummary) {
     loadErrors.diagnostics = ''
   } catch (reason) {
     if (disposed || generation !== diagnosticsGeneration) return
-    loadErrors.diagnostics = `诊断信息：${message(reason, '暂时无法加载')}`
+    loadErrors.diagnostics = sectionError('threatbook.diagnostics', reason)
   }
 }
 
@@ -116,7 +118,7 @@ async function loadTask() {
     await loadDiagnostics(payload)
   } catch (reason) {
     if (disposed || generation !== taskGeneration) return
-    loadErrors.task = `任务概况：${message(reason, '暂时无法加载')}`
+    loadErrors.task = sectionError('threatbook.taskOverview', reason)
   }
 }
 
@@ -131,7 +133,7 @@ async function loadBatches(page: number) {
     loadErrors.batches = ''
   } catch (reason) {
     if (disposed || generation !== batchGeneration) return
-    loadErrors.batches = `批次明细：${message(reason, '暂时无法加载')}`
+    loadErrors.batches = sectionError('threatbook.batchDetails', reason)
   }
 }
 
@@ -146,7 +148,7 @@ async function loadResults(page: number, snapshot = filterSnapshot(appliedFilter
     loadErrors.results = ''
   } catch (reason) {
     if (disposed || generation !== resultGeneration) return
-    loadErrors.results = `情报结果：${message(reason, '暂时无法加载')}`
+    loadErrors.results = sectionError('threatbook.intelligenceResults', reason)
   }
 }
 
@@ -188,7 +190,7 @@ async function retryThreatbook() {
     retryHandoff.value = true
     await loadWorkspace()
   } catch (reason) {
-    loadErrors.action = `重试失败：${message(reason, '请求未完成')}`
+    loadErrors.action = sectionError('threatbook.retryFailed', reason)
   } finally {
     retrying.value = false
   }
@@ -204,7 +206,7 @@ function asnText(result: ThreatbookResult) {
 }
 
 function dateText(value: string | null) {
-  return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
+  return value ? new Date(value).toLocaleString(locale.value, { hour12: false }) : '—'
 }
 
 function safePermalink(value: string | null) {
@@ -218,7 +220,7 @@ function safePermalink(value: string | null) {
 }
 
 function configValue(value: number | null | undefined, suffix = '') {
-  return value === null || value === undefined ? '未提供' : `${value}${suffix}`
+  return value === null || value === undefined ? t('threatbook.notProvided') : `${value}${suffix}`
 }
 
 function timestamp(value: string) {
@@ -227,10 +229,12 @@ function timestamp(value: string) {
 
 function durationText(seconds: number) {
   const safeSeconds = Math.max(0, Math.round(seconds))
-  if (safeSeconds < 60) return `${safeSeconds} 秒`
+  if (safeSeconds < 60) return t('threatbook.seconds', { value: safeSeconds })
   const minutes = Math.floor(safeSeconds / 60)
   const remainder = safeSeconds % 60
-  return remainder ? `${minutes} 分 ${remainder} 秒` : `${minutes} 分钟`
+  return remainder
+    ? t('threatbook.minutesSeconds', { minutes, seconds: remainder })
+    : t('threatbook.minutes', { value: minutes })
 }
 
 const elapsedText = computed(() => {
@@ -242,8 +246,8 @@ const elapsedText = computed(() => {
 
 const etaText = computed(() => {
   if (!active.value || remaining.value <= 0) return null
-  if (!observedRate.value || observedRate.value <= 0) return '计算中'
-  return `约 ${durationText(remaining.value / observedRate.value)}`
+  if (!observedRate.value || observedRate.value <= 0) return t('threatbook.calculating')
+  return t('threatbook.approximately', { value: durationText(remaining.value / observedRate.value) })
 })
 
 function attemptsForBatch(batchId: string) {
@@ -269,73 +273,73 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="loading && !task" class="panel empty">正在加载微步工作台…</div>
+  <div v-if="loading && !task" class="panel empty">{{ t('threatbook.loading') }}</div>
   <template v-else-if="task">
     <section class="page-head compact threatbook-head">
-      <div><span class="kicker">THREATBOOK TASK {{ task.id.slice(0, 8) }}</span><h2>微步情报工作台</h2><p>{{ task.original_filename || '手动 IP 查询' }} · 状态：{{ task.status }}<b v-if="readOnlyHistory" class="history-readonly">历史只读</b></p></div>
-      <div class="task-actions"><a class="button ghost" :href="`/api/tasks/${taskId}/exports/threatbook_complete.xlsx`">导出微步结果</a><RouterLink class="button ghost" :to="`/tasks/${taskId}`">返回任务详情</RouterLink><RouterLink v-if="readOnlyHistory" class="button ghost" to="/threatbook-history">返回微步历史</RouterLink><RouterLink v-else class="button ghost" to="/history">返回任务历史</RouterLink></div>
+      <div><span class="kicker">THREATBOOK TASK {{ task.id.slice(0, 8) }}</span><h2>{{ t('threatbook.title') }}</h2><p>{{ task.original_filename || t('task.manualQuery') }} · {{ t('task.status') }}: {{ t(`statuses.${task.status}`) }}<b v-if="readOnlyHistory" class="history-readonly">{{ t('threatbook.readOnly') }}</b></p></div>
+      <div class="task-actions"><a class="button ghost" :href="`/api/tasks/${taskId}/exports/threatbook_complete.xlsx`">{{ t('threatbook.exportResults') }}</a><RouterLink class="button ghost" :to="`/tasks/${taskId}`">{{ t('threatbook.backToTask') }}</RouterLink><RouterLink v-if="readOnlyHistory" class="button ghost" to="/threatbook-history">{{ t('threatbook.backToThreatbookHistory') }}</RouterLink><RouterLink v-else class="button ghost" to="/history">{{ t('task.backToHistory') }}</RouterLink></div>
     </section>
 
     <div v-if="visibleErrors.length" class="error-banner workspace-errors" role="alert"><span v-for="item in visibleErrors" :key="item">{{ item }}</span></div>
 
-    <section class="stats-grid threatbook-stats" aria-label="微步进度指标">
-      <article><span>总待查</span><b>{{ progressTotal }}</b></article>
-      <article><span>已完成</span><b>{{ progressCurrent }}</b></article>
-      <article><span>剩余</span><b>{{ remaining }}</b></article>
-      <article><span>失败</span><b>{{ task.failed_count }}</b></article>
-      <article class="danger-card"><span>恶意 IP</span><b>{{ task.malicious_count }}</b></article>
+    <section class="stats-grid threatbook-stats" :aria-label="t('threatbook.progressMetrics')">
+      <article><span>{{ t('threatbook.totalQueued') }}</span><b>{{ progressTotal }}</b></article>
+      <article><span>{{ t('statuses.completed') }}</span><b>{{ progressCurrent }}</b></article>
+      <article><span>{{ t('threatbook.remaining') }}</span><b>{{ remaining }}</b></article>
+      <article><span>{{ t('statuses.failed') }}</span><b>{{ task.failed_count }}</b></article>
+      <article class="danger-card"><span>{{ t('task.maliciousIps') }}</span><b>{{ task.malicious_count }}</b></article>
     </section>
 
     <section class="panel workspace-progress">
-      <div class="section-title"><div><span class="kicker">LIVE EXECUTION</span><h3>实时执行进度</h3></div><span v-if="shouldPoll" class="live-dot">每 1.5 秒更新</span></div>
+      <div class="section-title"><div><span class="kicker">LIVE EXECUTION</span><h3>{{ t('threatbook.liveProgress') }}</h3></div><span v-if="shouldPoll" class="live-dot">{{ t('threatbook.polling') }}</span></div>
       <div class="progress-copy"><b>{{ progressPercent }}%</b><span>{{ progressCurrent }} / {{ progressTotal }} IP</span></div>
       <div class="progress-track" role="progressbar" :aria-valuenow="progressPercent" aria-valuemin="0" aria-valuemax="100"><i :style="{ width: `${progressPercent}%` }"></i></div>
       <div class="execution-grid">
-        <span>当前批次 <b>{{ threatbookStep?.current_batch || 0 }} / {{ threatbookStep?.total_batches || 0 }}</b></span>
-        <span>批大小 <b>{{ configValue(task.threatbook_config?.batch_size) }}</b></span>
-        <span>安全速率 <b>{{ configValue(task.threatbook_config?.safe_ips_per_minute, ' IP/分钟') }}</b></span>
-        <span>每日预算 <b>{{ configValue(task.threatbook_config?.daily_budget) }}</b></span>
-        <span>最大重试 <b>{{ configValue(task.threatbook_config?.max_retries) }}</b></span>
-        <span>已用时间 <b>{{ elapsedText }}</b></span>
-        <span v-if="etaText">预计剩余 <b>{{ etaText }}</b></span>
+        <span>{{ t('threatbook.currentBatch') }} <b>{{ threatbookStep?.current_batch || 0 }} / {{ threatbookStep?.total_batches || 0 }}</b></span>
+        <span>{{ t('threatbook.batchSize') }} <b>{{ configValue(task.threatbook_config?.batch_size) }}</b></span>
+        <span>{{ t('threatbook.safeRate') }} <b>{{ configValue(task.threatbook_config?.safe_ips_per_minute, ` ${t('threatbook.ipsPerMinute')}`) }}</b></span>
+        <span>{{ t('threatbook.dailyBudget') }} <b>{{ configValue(task.threatbook_config?.daily_budget) }}</b></span>
+        <span>{{ t('threatbook.maxRetries') }} <b>{{ configValue(task.threatbook_config?.max_retries) }}</b></span>
+        <span>{{ t('threatbook.elapsed') }} <b>{{ elapsedText }}</b></span>
+        <span v-if="etaText">{{ t('threatbook.estimatedRemaining') }} <b>{{ etaText }}</b></span>
       </div>
       <div v-if="canRetry || (readOnlyHistory && ['failed', 'partial_success'].includes(task.status))" class="failure-detail compact-failure">
-        <div><b>{{ diagnostics?.error_summary || task.error_summary || '微步查询未全部完成' }}</b><span>最后成功检查点：{{ diagnostics?.last_successful_checkpoint || '无' }}</span></div>
-        <button v-if="canRetry" class="primary retry-threatbook" :disabled="retrying" @click="retryThreatbook">{{ retrying ? '正在重试…' : '重试微步节点' }}</button>
+        <div><b>{{ diagnostics?.error_summary || task.error_summary || t('threatbook.incomplete') }}</b><span>{{ t('task.lastCheckpoint') }}: {{ diagnostics?.last_successful_checkpoint || t('common.none') }}</span></div>
+        <button v-if="canRetry" class="primary retry-threatbook" :disabled="retrying" @click="retryThreatbook">{{ t(retrying ? 'threatbook.retrying' : 'threatbook.retryStep') }}</button>
       </div>
     </section>
 
     <section class="panel table-panel">
-      <div class="section-title"><div><span class="kicker">BATCH DIAGNOSTICS</span><h3>执行批次</h3></div><span v-if="batches" class="muted">第 {{ batches.page }} / {{ batchPages }} 页，共 {{ batches.total }} 批</span></div>
-      <table v-if="batches?.items.length"><thead><tr><th>批次</th><th>状态</th><th>IP 数</th><th>已解析</th><th>未解析</th><th>尝试</th><th>响应码</th><th>响应信息</th><th>开始时间</th><th>完成时间</th><th>诊断</th></tr></thead><tbody><tr v-for="batch in batches.items" :key="batch.id"><td>#{{ batch.batch_number }}</td><td><span class="status" :class="batch.status">{{ batch.status }}</span></td><td>{{ batch.address_count }}</td><td>{{ batch.resolved_count }}</td><td>{{ batch.unresolved_count }}</td><td>{{ batch.attempt_count }}</td><td>{{ batch.response_code ?? '—' }}</td><td>{{ batch.response_message || '—' }}</td><td>{{ dateText(batch.created_at) }}</td><td>{{ dateText(batch.finished_at) }}</td><td><a v-if="batch.status === 'failed' && attemptsForBatch(batch.id).length" class="text-link" :href="`#batch-attempts-${batch.id}`">{{ attemptsForBatch(batch.id).length }} 条尝试</a><span v-else-if="batch.status === 'failed'">最近诊断窗口未包含</span><span v-else>—</span></td></tr></tbody></table>
-      <p v-else class="empty-row muted">{{ loadErrors.batches ? '批次明细暂未加载' : '尚无微步执行批次。' }}</p>
-      <div v-if="batches" class="pagination workspace-pagination" aria-label="批次分页"><button class="button ghost" :disabled="batches.page <= 1" @click="loadBatches(batches.page - 1)">上一页</button><button class="button ghost" :disabled="batches.page >= batchPages" @click="loadBatches(batches.page + 1)">下一页</button></div>
+      <div class="section-title"><div><span class="kicker">BATCH DIAGNOSTICS</span><h3>{{ t('threatbook.executionBatches') }}</h3></div><span v-if="batches" class="muted">{{ t('threatbook.batchPageSummary', { page: batches.page, pages: batchPages, total: batches.total }) }}</span></div>
+      <table v-if="batches?.items.length"><thead><tr><th>{{ t('task.batch') }}</th><th>{{ t('task.status') }}</th><th>{{ t('threatbook.ipCount') }}</th><th>{{ t('threatbook.resolved') }}</th><th>{{ t('threatbook.unresolved') }}</th><th>{{ t('task.attempt') }}</th><th>{{ t('threatbook.responseCode') }}</th><th>{{ t('threatbook.responseMessage') }}</th><th>{{ t('threatbook.startedAt') }}</th><th>{{ t('threatbook.finishedAt') }}</th><th>{{ t('threatbook.diagnostics') }}</th></tr></thead><tbody><tr v-for="batch in batches.items" :key="batch.id"><td>#{{ batch.batch_number }}</td><td><span class="status" :class="batch.status">{{ t(`statuses.${batch.status}`) }}</span></td><td>{{ batch.address_count }}</td><td>{{ batch.resolved_count }}</td><td>{{ batch.unresolved_count }}</td><td>{{ batch.attempt_count }}</td><td>{{ batch.response_code ?? '—' }}</td><td>{{ batch.response_message || '—' }}</td><td>{{ dateText(batch.created_at) }}</td><td>{{ dateText(batch.finished_at) }}</td><td><a v-if="batch.status === 'failed' && attemptsForBatch(batch.id).length" class="text-link" :href="`#batch-attempts-${batch.id}`">{{ t('threatbook.attemptCount', { value: attemptsForBatch(batch.id).length }) }}</a><span v-else-if="batch.status === 'failed'">{{ t('threatbook.notInDiagnosticWindow') }}</span><span v-else>—</span></td></tr></tbody></table>
+      <p v-else class="empty-row muted">{{ t(loadErrors.batches ? 'threatbook.batchUnavailable' : 'threatbook.noBatches') }}</p>
+      <div v-if="batches" class="pagination workspace-pagination" :aria-label="t('threatbook.batchPagination')"><button class="button ghost" :disabled="batches.page <= 1" @click="loadBatches(batches.page - 1)">{{ t('common.previous') }}</button><button class="button ghost" :disabled="batches.page >= batchPages" @click="loadBatches(batches.page + 1)">{{ t('common.next') }}</button></div>
       <div v-if="diagnostics?.attempts.length" class="batch-attempt-diagnostics">
         <section v-for="batch in batches?.items.filter((item) => attemptsForBatch(item.id).length)" :id="`batch-attempts-${batch.id}`" :key="`attempts-${batch.id}`">
-          <h4>批次 #{{ batch.batch_number }} 尝试诊断</h4>
-          <p class="muted">显示最近 {{ diagnostics.attempt_limit }} 条诊断窗口中的 {{ attemptsForBatch(batch.id).length }} 条相关尝试</p>
-          <table><thead><tr><th>尝试</th><th>状态</th><th>响应码</th><th>错误类型</th><th>错误信息</th><th>完成时间</th></tr></thead><tbody><tr v-for="attempt in attemptsForBatch(batch.id)" :key="attempt.id"><td>#{{ attempt.attempt_number }}</td><td>{{ attempt.status }}</td><td>{{ attempt.response_code ?? '—' }}</td><td>{{ attempt.error_type || '—' }}</td><td>{{ attempt.error_message || '—' }}</td><td>{{ dateText(attempt.finished_at) }}</td></tr></tbody></table>
+          <h4>{{ t('threatbook.batchAttemptDiagnostics', { value: batch.batch_number }) }}</h4>
+          <p class="muted">{{ t('threatbook.diagnosticWindow', { limit: diagnostics.attempt_limit, count: attemptsForBatch(batch.id).length }) }}</p>
+          <table><thead><tr><th>{{ t('task.attempt') }}</th><th>{{ t('task.status') }}</th><th>{{ t('threatbook.responseCode') }}</th><th>{{ t('task.errorType') }}</th><th>{{ t('task.errorMessage') }}</th><th>{{ t('threatbook.finishedAt') }}</th></tr></thead><tbody><tr v-for="attempt in attemptsForBatch(batch.id)" :key="attempt.id"><td>#{{ attempt.attempt_number }}</td><td>{{ t(`statuses.${attempt.status}`) }}</td><td>{{ attempt.response_code ?? '—' }}</td><td>{{ attempt.error_type || '—' }}</td><td>{{ attempt.error_message || '—' }}</td><td>{{ dateText(attempt.finished_at) }}</td></tr></tbody></table>
         </section>
       </div>
     </section>
 
     <section class="panel table-panel intelligence-panel">
-      <div class="section-title"><div><span class="kicker">IP INTELLIGENCE</span><h3>情报结果</h3></div><span v-if="results" class="muted">第 {{ results.page }} / {{ resultPages }} 页，共 {{ results.total }} 条</span></div>
+      <div class="section-title"><div><span class="kicker">IP INTELLIGENCE</span><h3>{{ t('threatbook.intelligenceResults') }}</h3></div><span v-if="results" class="muted">{{ t('task.pageSummary', { page: results.page, pages: resultPages, total: results.total }) }}</span></div>
       <form class="result-filters" @submit.prevent="submitFilters">
-        <input v-model.trim="filters.q" aria-label="IP 搜索" placeholder="搜索 IP">
-        <select v-model="filters.malicious" aria-label="恶意状态"><option value="">全部恶意状态</option><option value="true">恶意</option><option value="false">非恶意</option></select>
-        <input v-model.trim="filters.judgment" aria-label="威胁标签" placeholder="威胁标签">
-        <input v-model.trim="filters.country" aria-label="国家" placeholder="国家">
-        <input v-model.trim="filters.province" aria-label="省份" placeholder="省份">
-        <input v-model.trim="filters.city" aria-label="城市" placeholder="城市">
-        <input v-model.trim="filters.severity" aria-label="严重度" placeholder="严重度">
-        <input v-model.trim="filters.confidence" aria-label="可信度" placeholder="可信度">
-        <button class="primary" type="submit">应用筛选</button><button class="button ghost" type="button" @click="clearFilters">清空</button>
+        <input v-model.trim="filters.q" :aria-label="t('threatbook.ipSearch')" :placeholder="t('threatbook.searchIp')">
+        <select v-model="filters.malicious" :aria-label="t('threatbook.maliciousStatus')"><option value="">{{ t('threatbook.allMalicious') }}</option><option value="true">{{ t('common.malicious') }}</option><option value="false">{{ t('common.notMalicious') }}</option></select>
+        <input v-model.trim="filters.judgment" :aria-label="t('threatbook.threatLabel')" :placeholder="t('threatbook.threatLabel')">
+        <input v-model.trim="filters.country" :aria-label="t('threatbook.country')" :placeholder="t('threatbook.country')">
+        <input v-model.trim="filters.province" :aria-label="t('threatbook.province')" :placeholder="t('threatbook.province')">
+        <input v-model.trim="filters.city" :aria-label="t('threatbook.city')" :placeholder="t('threatbook.city')">
+        <input v-model.trim="filters.severity" :aria-label="t('diagnostics.severity')" :placeholder="t('diagnostics.severity')">
+        <input v-model.trim="filters.confidence" :aria-label="t('diagnostics.confidence')" :placeholder="t('diagnostics.confidence')">
+        <button class="primary" type="submit">{{ t('common.applyFilters') }}</button><button class="button ghost" type="button" @click="clearFilters">{{ t('common.clear') }}</button>
       </form>
-      <table v-if="results?.items.length"><thead><tr><th>IP</th><th>恶意</th><th>可信度</th><th>严重度</th><th>威胁标签</th><th>国家 / 省 / 市</th><th>运营商</th><th>ASN</th><th>场景</th><th>更新时间</th><th>微步链接</th><th>排查</th></tr></thead><tbody><tr v-for="result in results.items" :key="result.id"><td><code>{{ result.ip }}</code></td><td :class="result.is_malicious ? 'danger-text' : 'ok-text'">{{ result.is_malicious ? '恶意' : '非恶意' }}</td><td>{{ result.confidence_level || '—' }}</td><td>{{ result.severity || '—' }}</td><td>{{ result.judgments.join('、') || '—' }}</td><td>{{ locationText(result) }}</td><td>{{ result.carrier || '—' }}</td><td>{{ asnText(result) }}</td><td>{{ result.scene || '—' }}</td><td>{{ result.update_time || '—' }}</td><td><a v-if="safePermalink(result.permalink)" class="text-link" :href="safePermalink(result.permalink)!" target="_blank" rel="noopener noreferrer">查看情报</a><span v-else>—</span></td><td><RouterLink class="text-link" :to="diagnosticIpLink(result.task_ip_id)">排查 →</RouterLink></td></tr></tbody></table>
-      <p v-else class="empty-row muted">{{ loadErrors.results ? '情报结果暂未加载' : '没有符合条件的情报结果。' }}</p>
-      <div v-if="results" class="pagination workspace-pagination" aria-label="情报结果分页"><button class="button ghost" :disabled="results.page <= 1" @click="loadResults(results.page - 1)">上一页</button><button class="button ghost" :disabled="results.page >= resultPages" @click="loadResults(results.page + 1)">下一页</button></div>
+      <table v-if="results?.items.length"><thead><tr><th>IP</th><th>{{ t('common.malicious') }}</th><th>{{ t('diagnostics.confidence') }}</th><th>{{ t('diagnostics.severity') }}</th><th>{{ t('threatbook.threatLabel') }}</th><th>{{ t('threatbook.location') }}</th><th>{{ t('threatbook.carrier') }}</th><th>ASN</th><th>{{ t('threatbook.scene') }}</th><th>{{ t('threatbook.updatedAt') }}</th><th>{{ t('threatbook.link') }}</th><th>{{ t('task.investigate') }}</th></tr></thead><tbody><tr v-for="result in results.items" :key="result.id"><td><code>{{ result.ip }}</code></td><td :class="result.is_malicious ? 'danger-text' : 'ok-text'">{{ t(result.is_malicious ? 'common.malicious' : 'common.notMalicious') }}</td><td>{{ result.confidence_level || '—' }}</td><td>{{ result.severity || '—' }}</td><td>{{ result.judgments.join(', ') || '—' }}</td><td>{{ locationText(result) }}</td><td>{{ result.carrier || '—' }}</td><td>{{ asnText(result) }}</td><td>{{ result.scene || '—' }}</td><td>{{ result.update_time || '—' }}</td><td><a v-if="safePermalink(result.permalink)" class="text-link" :href="safePermalink(result.permalink)!" target="_blank" rel="noopener noreferrer">{{ t('threatbook.viewIntelligence') }}</a><span v-else>—</span></td><td><RouterLink class="text-link" :to="diagnosticIpLink(result.task_ip_id)">{{ t('task.investigate') }} →</RouterLink></td></tr></tbody></table>
+      <p v-else class="empty-row muted">{{ t(loadErrors.results ? 'threatbook.resultsUnavailable' : 'threatbook.noResults') }}</p>
+      <div v-if="results" class="pagination workspace-pagination" :aria-label="t('threatbook.resultsPagination')"><button class="button ghost" :disabled="results.page <= 1" @click="loadResults(results.page - 1)">{{ t('common.previous') }}</button><button class="button ghost" :disabled="results.page >= resultPages" @click="loadResults(results.page + 1)">{{ t('common.next') }}</button></div>
     </section>
   </template>
-  <section v-else class="panel empty"><p v-for="item in visibleErrors" :key="item" class="error-banner">{{ item }}</p><RouterLink class="button ghost" :to="`/tasks/${taskId}`">返回任务详情</RouterLink></section>
+  <section v-else class="panel empty"><p v-for="item in visibleErrors" :key="item" class="error-banner">{{ item }}</p><RouterLink class="button ghost" :to="`/tasks/${taskId}`">{{ t('threatbook.backToTask') }}</RouterLink></section>
 </template>

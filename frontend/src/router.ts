@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+import Dashboard from './views/Dashboard.vue'
 import History from './views/History.vue'
 import IpDiagnostics from './views/IpDiagnostics.vue'
 import NewTask from './views/NewTask.vue'
@@ -11,7 +12,8 @@ import ThreatbookWorkspace from './views/ThreatbookWorkspace.vue'
 export default createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', component: NewTask },
+    { path: '/', component: Dashboard },
+    { path: '/new', component: NewTask },
     { path: '/history', component: History },
     { path: '/tasks/:id', component: TaskProgress },
     { path: '/tasks/:id/threatbook', component: ThreatbookWorkspace },

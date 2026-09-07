@@ -37,7 +37,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const problem: ApiProblem = isApiProblem(detail)
       ? detail
       : {
-          code: 'request.failed',
+          code: typeof detail === 'string' ? 'legacy.error' : 'request.failed',
           fallback: typeof detail === 'string'
             ? detail
             : `Request failed with status ${response.status}.`,
@@ -55,6 +55,7 @@ export type TranslationFunction = (
 
 export function translateApiError(value: unknown, translate: TranslationFunction): string {
   if (value instanceof ApiError) {
+    if (value.code === 'legacy.error') return value.fallback
     const key = `errors.${value.code}`
     const translated = translate(key, value.params)
     return translated === key ? value.fallback : translated

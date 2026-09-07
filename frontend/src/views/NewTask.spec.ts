@@ -11,10 +11,10 @@ describe('New task', () => {
       routes: [{ path: '/', component: NewTask }],
     })
     const wrapper = mount(NewTask, { global: { plugins: [router] } })
-    expect(wrapper.text()).toContain('手动输入')
-    expect(wrapper.text()).toContain('攻击日志')
+    expect(wrapper.text()).toContain('Manual input')
+    expect(wrapper.text()).toContain('Attack log')
     const buttons = wrapper.findAll('.mode-tabs button')
-    expect(buttons.map((button) => button.text())).toEqual(['手动输入', '攻击日志', '访问日志'])
+    expect(buttons.map((button) => button.text())).toEqual(['Manual input', 'Attack log', 'Access log'])
 
     await buttons[1].trigger('click')
     expect(wrapper.find('input[type="file"]').attributes('accept')).toBeUndefined()

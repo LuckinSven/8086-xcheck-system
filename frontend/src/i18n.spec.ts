@@ -55,4 +55,17 @@ describe('internationalization foundation', () => {
       motion_intensity: 'medium',
     })
   })
+
+  it('keeps presentation copy out of Vue templates', () => {
+    const templates = import.meta.glob(['./App.vue', './views/*.vue'], {
+      eager: true,
+      query: '?raw',
+      import: 'default',
+    }) as Record<string, string>
+    const protocolAndNativeLabels = /简体中文|当前名单|历史名单|失效名单|未命中|异常/g
+
+    for (const [path, source] of Object.entries(templates)) {
+      expect(source.replace(protocolAndNativeLabels, ''), path).not.toMatch(/[一-龥]/)
+    }
+  })
 })

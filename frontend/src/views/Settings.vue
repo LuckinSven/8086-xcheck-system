@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
-import { api } from '../api'
+import { api, translateApiError } from '../api'
+import { themes } from '../theme'
+import type { DisplaySettings, SystemSettings } from '../types'
+import { applyUiSettings, DEFAULT_DISPLAY_SETTINGS } from '../ui-settings'
 
-interface SettingsPayload {
+interface SettingsForm extends DisplaySettings {
   whitelist_api_url: string
   threatbook_api_url: string
-  threatbook_api_key?: string
-  clear_threatbook_api_key?: boolean
-  threatbook_api_key_configured?: boolean
-  upload_max_bytes?: number
+  threatbook_api_key: string
+  clear_threatbook_api_key: boolean
   threatbook_batch_size: number
   threatbook_safe_ips_per_minute: number
   threatbook_daily_budget: number
@@ -18,11 +20,14 @@ interface SettingsPayload {
 
 interface ProbeResult {
   ok: boolean
-  message: string
+  code: string
+  fallback: string
+  params: Record<string, string | number>
   latency_ms: number
 }
 
-const form = reactive<SettingsPayload>({
+const { t } = useI18n()
+const form = reactive<SettingsForm>({
   whitelist_api_url: '',
   threatbook_api_url: '',
   threatbook_api_key: '',
@@ -31,30 +36,44 @@ const form = reactive<SettingsPayload>({
   threatbook_safe_ips_per_minute: 800,
   threatbook_daily_budget: 10000,
   threatbook_max_retries: 3,
+  ...DEFAULT_DISPLAY_SETTINGS,
 })
-const extra = ref<SettingsPayload | null>(null)
+const extra = ref<SystemSettings | null>(null)
 const message = ref('')
 const error = ref('')
 const busy = ref('')
-const probeResult = reactive<Record<string, ProbeResult | null>>({ whitelist: null, threatbook: null })
+const probeResult = reactive<Record<'whitelist' | 'threatbook', ProbeResult | null>>({
+  whitelist: null,
+  threatbook: null,
+})
 
-function applyLoaded(value: SettingsPayload) {
+function applyLoaded(value: SystemSettings) {
   form.whitelist_api_url = value.whitelist_api_url
   form.threatbook_api_url = value.threatbook_api_url
   form.threatbook_batch_size = value.threatbook_batch_size
   form.threatbook_safe_ips_per_minute = value.threatbook_safe_ips_per_minute
   form.threatbook_daily_budget = value.threatbook_daily_budget
   form.threatbook_max_retries = value.threatbook_max_retries
+  form.ui_language = value.ui_language
+  form.theme_id = value.theme_id
+  form.homepage_mode = value.homepage_mode
+  form.motion_intensity = value.motion_intensity
   form.threatbook_api_key = ''
   form.clear_threatbook_api_key = false
   extra.value = value
 }
 
+function translatedProbe(result: ProbeResult) {
+  const key = `messages.${result.code}`
+  const translated = t(key, result.params)
+  return translated === key ? result.fallback : translated
+}
+
 onMounted(async () => {
   try {
-    applyLoaded(await api.get<SettingsPayload>('/api/settings'))
+    applyLoaded(await api.get<SystemSettings>('/api/settings'))
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : '配置读取失败'
+    error.value = translateApiError(reason, t)
   }
 })
 
@@ -63,11 +82,12 @@ async function save(showMessage = true) {
   error.value = ''
   if (showMessage) message.value = ''
   try {
-    const value = await api.put<SettingsPayload>('/api/settings', { ...form })
+    const value = await api.put<SystemSettings>('/api/settings', { ...form })
     applyLoaded(value)
-    if (showMessage) message.value = '配置已保存；后续任务将使用新参数。'
+    applyUiSettings(value)
+    if (showMessage) message.value = t('settings.saved')
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : '配置保存失败'
+    error.value = translateApiError(reason, t)
   } finally {
     busy.value = ''
   }
@@ -80,7 +100,7 @@ async function probe(target: 'whitelist' | 'threatbook') {
   try {
     probeResult[target] = await api.post<ProbeResult>(`/api/settings/test-${target}`)
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : '接口测试失败'
+    error.value = translateApiError(reason, t)
   } finally {
     busy.value = ''
   }
@@ -89,33 +109,44 @@ async function probe(target: 'whitelist' | 'threatbook') {
 
 <template>
   <section class="page-head">
-    <div><span class="kicker">INTEGRATION CONTROL</span><h2>系统设置</h2><p>直接配置内网查白与微步接口，并在保存后发起真实认证测试。</p></div>
-    <div class="capacity"><b :class="extra?.threatbook_api_key_configured ? 'ok-text' : 'danger-text'">{{ extra?.threatbook_api_key_configured ? '认证就绪' : '等待配置' }}</b><span>微步 API</span></div>
+    <div><span class="kicker">SYSTEM CONTROL</span><h2>{{ t('common.systemSettings') }}</h2><p>{{ t('settings.description') }}</p></div>
+    <div class="capacity"><b :class="extra?.threatbook_api_key_configured ? 'ok-text' : 'danger-text'">{{ t(extra?.threatbook_api_key_configured ? 'settings.authReady' : 'settings.awaitingConfiguration') }}</b><span>ThreatBook API</span></div>
   </section>
 
   <section class="settings-stack">
+    <article class="panel appearance-panel">
+      <div class="section-title"><div><span class="kicker">APPEARANCE &amp; LANGUAGE</span><h3>{{ t('settings.appearanceAndLanguage') }}</h3></div><span class="muted">{{ t('settings.appearanceHint') }}</span></div>
+      <div class="form-grid appearance-grid">
+        <label>{{ t('settings.language') }}<select v-model="form.ui_language" name="ui_language"><option value="en-US">English</option><option value="zh-CN">简体中文</option></select></label>
+        <label>{{ t('settings.theme') }}<select v-model="form.theme_id" name="theme_id"><option v-for="theme in themes" :key="theme.id" :value="theme.id">{{ t(`themes.${theme.id}.name`) }}</option></select></label>
+        <label>{{ t('settings.homepage') }}<select v-model="form.homepage_mode" name="homepage_mode"><option value="overview">{{ t('settings.homeModes.overview') }}</option><option value="landscape">{{ t('settings.homeModes.landscape') }}</option><option value="operations">{{ t('settings.homeModes.operations') }}</option></select></label>
+        <label>{{ t('settings.motion') }}<select v-model="form.motion_intensity" name="motion_intensity"><option value="off">{{ t('settings.motionModes.off') }}</option><option value="subtle">{{ t('settings.motionModes.subtle') }}</option><option value="medium">{{ t('settings.motionModes.medium') }}</option><option value="strong">{{ t('settings.motionModes.strong') }}</option></select></label>
+      </div>
+      <div class="theme-swatches" aria-hidden="true"><span v-for="theme in themes" :key="theme.id" :class="{ active: theme.id === form.theme_id }"><i v-for="color in theme.swatches" :key="color" :style="{ background: color }"></i></span></div>
+    </article>
+
     <div class="integration-grid">
       <article class="panel integration-card">
-        <div class="integration-heading"><div class="integration-icon">W</div><div><span class="kicker">WHITELIST API</span><h3>白名单接口</h3></div></div>
-        <label class="field-label">查询地址<input v-model.trim="form.whitelist_api_url" name="whitelist_api_url" type="url" placeholder="http://服务器IP:8085/api/v1/whitelist/query" /></label>
-        <button class="button ghost" data-action="test-whitelist" :disabled="!!busy" @click="probe('whitelist')">{{ busy === 'whitelist' ? '正在测试…' : '测试白名单连接' }}</button>
-        <p v-if="probeResult.whitelist" class="probe-result"><i></i>{{ probeResult.whitelist.message }} · {{ probeResult.whitelist.latency_ms }} ms</p>
+        <div class="integration-heading"><div class="integration-icon">W</div><div><span class="kicker">WHITELIST API</span><h3>{{ t('settings.whitelistApi') }}</h3></div></div>
+        <label class="field-label">{{ t('settings.endpoint') }}<input v-model.trim="form.whitelist_api_url" name="whitelist_api_url" type="url" placeholder="http://server-ip:8085/api/v1/whitelist/query" /></label>
+        <button class="button ghost" data-action="test-whitelist" :disabled="!!busy" @click="probe('whitelist')">{{ t(busy === 'whitelist' ? 'settings.testing' : 'settings.testWhitelist') }}</button>
+        <p v-if="probeResult.whitelist" class="probe-result"><i></i>{{ translatedProbe(probeResult.whitelist) }} · {{ probeResult.whitelist.latency_ms }} ms</p>
       </article>
 
       <article class="panel integration-card">
-        <div class="integration-heading"><div class="integration-icon blue">T</div><div><span class="kicker">THREATBOOK API</span><h3>微步接口与认证</h3></div></div>
-        <label class="field-label">查询地址<input v-model.trim="form.threatbook_api_url" name="threatbook_api_url" type="url" placeholder="https://api.threatbook.cn/v3/scene/ip_reputation" /></label>
-        <label class="field-label">API Key<input v-model="form.threatbook_api_key" type="password" autocomplete="new-password" :placeholder="extra?.threatbook_api_key_configured ? '已配置；留空表示不修改' : '请输入微步 API Key'" /></label>
-        <label v-if="extra?.threatbook_api_key_configured" class="check-label"><input v-model="form.clear_threatbook_api_key" type="checkbox" /> 清除当前密钥</label>
-        <button class="button ghost" data-action="test-threatbook" :disabled="!!busy" @click="probe('threatbook')">{{ busy === 'threatbook' ? '正在认证…' : '测试微步认证' }}</button>
-        <p v-if="probeResult.threatbook" class="probe-result"><i></i>{{ probeResult.threatbook.message }} · {{ probeResult.threatbook.latency_ms }} ms</p>
+        <div class="integration-heading"><div class="integration-icon blue">T</div><div><span class="kicker">THREATBOOK API</span><h3>{{ t('settings.threatbookApi') }}</h3></div></div>
+        <label class="field-label">{{ t('settings.endpoint') }}<input v-model.trim="form.threatbook_api_url" name="threatbook_api_url" type="url" placeholder="https://api.threatbook.cn/v3/scene/ip_reputation" /></label>
+        <label class="field-label">API Key<input v-model="form.threatbook_api_key" type="password" autocomplete="new-password" :placeholder="t(extra?.threatbook_api_key_configured ? 'settings.keyConfigured' : 'settings.enterKey')" /></label>
+        <label v-if="extra?.threatbook_api_key_configured" class="check-label"><input v-model="form.clear_threatbook_api_key" type="checkbox" /> {{ t('settings.clearKey') }}</label>
+        <button class="button ghost" data-action="test-threatbook" :disabled="!!busy" @click="probe('threatbook')">{{ t(busy === 'threatbook' ? 'settings.authenticating' : 'settings.testThreatbook') }}</button>
+        <p v-if="probeResult.threatbook" class="probe-result"><i></i>{{ translatedProbe(probeResult.threatbook) }} · {{ probeResult.threatbook.latency_ms }} ms</p>
       </article>
     </div>
 
     <article class="panel limit-panel">
-      <div class="section-title"><div><span class="kicker">QUERY GUARDRAILS</span><h3>微步批量查询限制</h3></div><span class="muted">单并发 · 保存后对后续任务生效</span></div>
-      <div class="form-grid"><label>每批 IP 数<input v-model.number="form.threatbook_batch_size" type="number" min="1" max="100" /></label><label>安全速度（IP/分钟）<input v-model.number="form.threatbook_safe_ips_per_minute" type="number" min="1" max="1000" /></label><label>本地每日预算<input v-model.number="form.threatbook_daily_budget" type="number" min="1" /></label><label>最大重试次数<input v-model.number="form.threatbook_max_retries" type="number" min="0" max="3" /></label></div>
-      <div class="settings-actions"><button class="primary" data-action="save-settings" :disabled="!!busy" @click="save()">{{ busy === 'save' ? '正在保存…' : '保存全部配置' }}</button><span>接口测试使用最近一次保存的配置 · 上传上限 {{ Math.round((extra?.upload_max_bytes || 0) / 1024 / 1024) }} MB</span></div>
+      <div class="section-title"><div><span class="kicker">QUERY GUARDRAILS</span><h3>{{ t('settings.queryLimits') }}</h3></div><span class="muted">{{ t('settings.limitHint') }}</span></div>
+      <div class="form-grid"><label>{{ t('settings.batchSize') }}<input v-model.number="form.threatbook_batch_size" type="number" min="1" max="100" /></label><label>{{ t('settings.safeRate') }}<input v-model.number="form.threatbook_safe_ips_per_minute" type="number" min="1" max="1000" /></label><label>{{ t('settings.dailyBudget') }}<input v-model.number="form.threatbook_daily_budget" type="number" min="1" /></label><label>{{ t('settings.maxRetries') }}<input v-model.number="form.threatbook_max_retries" type="number" min="0" max="3" /></label></div>
+      <div class="settings-actions"><button class="primary" data-action="save-settings" :disabled="!!busy" @click="save()">{{ t(busy === 'save' ? 'settings.saving' : 'settings.saveAll') }}</button><span>{{ t('settings.probeUsesSaved') }} · {{ t('settings.uploadLimit', { value: Math.round((extra?.upload_max_bytes || 0) / 1024 / 1024) }) }}</span></div>
     </article>
   </section>
   <p v-if="message" class="success-banner settings-message">{{ message }}</p>
