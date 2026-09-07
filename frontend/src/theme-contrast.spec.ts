@@ -31,7 +31,7 @@ function themeTokens(themeId: string) {
 }
 
 describe('theme contrast', () => {
-  it.each(themes)('$name keeps text and controls readable', (theme) => {
+  it.each(themes)('$id keeps text and controls readable', (theme) => {
     const tokens = themeTokens(theme.id)
 
     expect(contrast(tokens.blue, '#ffffff')).toBeGreaterThanOrEqual(4.5)
@@ -39,5 +39,10 @@ describe('theme contrast', () => {
     expect(contrast(tokens.muted, tokens['surface-soft'])).toBeGreaterThanOrEqual(4.5)
     expect(contrast(tokens.muted, tokens['accent-soft'])).toBeGreaterThanOrEqual(4.5)
     expect(contrast(tokens['focus-ring'], tokens.surface)).toBeGreaterThanOrEqual(3)
+    expect(tokens['ambient-a']).toMatch(/^#[a-f\d]{6,8}$/i)
+    expect(tokens['ambient-b']).toMatch(/^#[a-f\d]{6,8}$/i)
+    expect(tokens['glass-surface']).toMatch(/^#[a-f\d]{6,8}$/i)
+    expect(tokens['glass-surface-alpha']).toMatch(/^#[a-f\d]{8}$/i)
+    expect(tokens['glass-border']).toMatch(/^#[a-f\d]{6,8}$/i)
   })
 })
