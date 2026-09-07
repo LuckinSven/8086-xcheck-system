@@ -12,6 +12,10 @@ export const i18n = createI18n({
     'en-US': enUS,
     'zh-CN': zhCN,
   },
+  datetimeFormats: {
+    'en-US': { short: { dateStyle: 'medium', timeStyle: 'short' } },
+    'zh-CN': { short: { dateStyle: 'medium', timeStyle: 'short', hour12: false } },
+  },
 })
 
 export function setLocale(locale: UiLanguage) {

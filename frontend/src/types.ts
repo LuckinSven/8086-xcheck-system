@@ -207,3 +207,125 @@ export interface SystemSettings extends DisplaySettings {
     threatbook: IntegrationTestSummary
   }
 }
+
+export interface DashboardSection<T> {
+  available: boolean
+  items: T[]
+  limit?: number
+}
+
+export interface TrendPoint {
+  date: string
+  tasks?: number
+  addresses?: number
+  malicious: number
+}
+
+export interface RecentRisk {
+  task_id: string
+  created_at: string
+  ip: string
+  confidence: string | null
+  severity: string | null
+  labels: string[]
+  country: string | null
+  province: string | null
+  city: string | null
+}
+
+export interface AttentionTask {
+  task_id: string
+  status: string
+  current_step: string
+  error_summary: string | null
+  updated_at: string
+}
+
+export interface OverviewDashboard {
+  mode: 'overview'
+  generated_at: string
+  summary: {
+    total_tasks: number
+    total_unique_ips: number
+    malicious_ips: number
+    active_tasks: number
+    failed_tasks: number
+  }
+  sections: {
+    trend: DashboardSection<TrendPoint>
+    recent_risks: DashboardSection<RecentRisk>
+    attention: DashboardSection<AttentionTask>
+  }
+}
+
+export interface RankedDashboardItem {
+  name: string
+  count: number
+}
+
+export interface LandscapeDashboard {
+  mode: 'landscape'
+  generated_at: string
+  summary: {
+    malicious_last_24h: number
+    total_malicious: number
+    affected_countries: number
+  }
+  sections: {
+    countries: DashboardSection<RankedDashboardItem>
+    regions: DashboardSection<RankedDashboardItem>
+    labels: DashboardSection<RankedDashboardItem>
+    severities: DashboardSection<RankedDashboardItem>
+    trend: DashboardSection<TrendPoint>
+  }
+}
+
+export interface ActiveDashboardTask {
+  task_id: string
+  status: string
+  current_step: string
+  unique_count: number
+  created_at: string
+  current: number
+  total: number
+}
+
+export interface FailedDashboardNode {
+  task_id: string
+  step: string
+  error_summary: string | null
+  current: number
+  total: number
+  started_at: string | null
+}
+
+export interface DashboardIntegration {
+  name: string
+  status: 'untested' | 'success' | 'failed'
+  tested_at?: string | null
+  latency_ms: number | null
+  error_code?: string | null
+  credential_configured?: boolean
+}
+
+export interface OperationsDashboard {
+  mode: 'operations'
+  generated_at: string
+  summary: {
+    status_counts: Record<string, number>
+    backlog: number
+    progress: { current: number; total: number; percent: number }
+    daily_usage: number
+    daily_remaining: number
+    worker_status: string
+    database_status: string
+  }
+  sections: {
+    active_tasks: DashboardSection<ActiveDashboardTask>
+    failed_nodes: DashboardSection<FailedDashboardNode>
+    integration_health: DashboardSection<DashboardIntegration>
+    configuration: DashboardSection<{ name: string; value: number }>
+  }
+}
+
+export type DashboardPayload = OverviewDashboard | LandscapeDashboard | OperationsDashboard
