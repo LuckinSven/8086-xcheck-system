@@ -2,9 +2,15 @@
 
 [English](README.md)
 
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
 XCheck 是面向可信局域网、自托管部署的 IP 排查工作流。系统支持手动 IP 和常见日志文件，以流式方式解析大体量输入，完成校验、去重和查白，再按照安全速率将剩余公网 IP 提交到微步 IP 信誉接口。
 
 原始输入、任务历史、节点检查点、查白结论、微步批次、故障诊断和情报结果均保存在本地持久化存储中。目前以 200,000 行 CSV 作为验收基线。
+
+![使用演示数据的 XCheck 综合驾驶舱](docs/images/xcheck-homepage.png)
+
+> 截图使用纯演示数据及文档专用 IP 地址段，不包含真实任务数据。
 
 ## 主要功能
 
@@ -126,6 +132,12 @@ curl --fail http://127.0.0.1:8086/api/health
 ```
 
 更多说明参见 [docs/operations.md](docs/operations.md)。
+
+## 开源协议
+
+项目采用 [Apache License 2.0](LICENSE)，归属和第三方服务说明参见 [NOTICE](NOTICE)。
+
+ThreatBook、微步及相关名称可能是其权利人的商标。本项目是独立的第三方接口集成，与相关服务提供者不存在隶属或背书关系。开源协议不包含第三方 API 的访问权，也不额外授予第三方商标使用权。
 
 ## 开发检查
 

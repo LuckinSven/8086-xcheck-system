@@ -2,9 +2,15 @@
 
 [简体中文](README.zh-CN.md)
 
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
 XCheck is a self-hosted IP investigation workflow for trusted local networks. It accepts manual IP lists and common log files, streams and validates large inputs, removes duplicates, checks an existing whitelist service, and submits the remaining public IPs to the ThreatBook IP reputation API at a controlled rate.
 
 The application keeps the original input, task history, step checkpoints, whitelist conclusions, ThreatBook batches, diagnostics, and intelligence results in local persistent storage. A 200,000-row CSV is the current acceptance baseline.
+
+![XCheck Overview dashboard with demonstration data](docs/images/xcheck-homepage.png)
+
+> The screenshot uses demonstration data and documentation-only IP address ranges.
 
 ## Highlights
 
@@ -126,6 +132,12 @@ curl --fail http://127.0.0.1:8086/api/health
 ```
 
 Additional operational notes are available in [docs/operations.md](docs/operations.md) (Chinese).
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution and third-party service information.
+
+ThreatBook and related names may be trademarks of their respective owners. This independent project integrates with third-party services but is not affiliated with or endorsed by those service providers. The license does not grant access to any third-party API or permission to use third-party trademarks beyond applicable law.
 
 ## Development checks
 
