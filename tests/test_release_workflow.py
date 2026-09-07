@@ -14,10 +14,11 @@ def test_release_workflow_publishes_version_tags_with_minimal_permissions():
     workflow = load_workflow()
 
     assert workflow["on"]["push"]["tags"] == ["v*.*.*"]
+    assert workflow["on"]["workflow_dispatch"]["inputs"]["release_tag"]["required"] == "true"
     assert workflow["permissions"] == {"contents": "write", "packages": "write"}
 
 
-def test_release_workflow_builds_multi_arch_image_and_creates_release():
+def test_release_workflow_builds_amd64_image_and_creates_release():
     workflow = load_workflow()
     steps = workflow["jobs"]["publish"]["steps"]
     uses = [step.get("uses", "") for step in steps]
@@ -29,13 +30,14 @@ def test_release_workflow_builds_multi_arch_image_and_creates_release():
     assert any(item.startswith("docker/metadata-action@") for item in uses)
     assert any(item.startswith("docker/build-push-action@") for item in uses)
     assert build_step["with"]["push"] == "true"
-    assert build_step["with"]["platforms"] == "linux/amd64,linux/arm64"
+    assert build_step["with"]["platforms"] == "linux/amd64"
     assert "type=semver,pattern={{version}}" in metadata_step["with"]["tags"]
     assert "type=semver,pattern={{raw}}" in metadata_step["with"]["tags"]
     assert "type=raw,value=latest" in metadata_step["with"]["tags"]
     assert build_step["with"]["tags"] == "${{ steps.metadata.outputs.tags }}"
     assert "gh release create" in release_step["run"]
     assert "--generate-notes" in release_step["run"]
+    assert "${RELEASE_TAG}" in release_step["run"]
 
 
 def test_compose_defaults_to_the_published_container_image():

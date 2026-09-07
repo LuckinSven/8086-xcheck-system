@@ -136,7 +136,7 @@ docker compose up -d --no-build
 curl --fail http://127.0.0.1:8086/api/health
 ```
 
-Use `XCHECK_IMAGE_TAG=v0.1.0 docker compose up -d --no-build` to pin a specific release. Version tags automatically publish matching multi-architecture images and a GitHub Release.
+Use `XCHECK_IMAGE_TAG=v0.1.0 docker compose up -d --no-build` to pin a specific release. Version tags automatically publish matching AMD64 images and a GitHub Release.
 
 Additional operational notes are available in [docs/operations.md](docs/operations.md) (Chinese).
 

@@ -136,7 +136,7 @@ docker compose up -d --no-build
 curl --fail http://127.0.0.1:8086/api/health
 ```
 
-如需锁定特定版本，可运行 `XCHECK_IMAGE_TAG=v0.1.0 docker compose up -d --no-build`。每次推送版本标签都会自动发布对应的多架构镜像和 GitHub Release。
+如需锁定特定版本，可运行 `XCHECK_IMAGE_TAG=v0.1.0 docker compose up -d --no-build`。每次推送版本标签都会自动发布对应的 AMD64 镜像和 GitHub Release。
 
 更多说明参见 [docs/operations.md](docs/operations.md)。
 
