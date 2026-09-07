@@ -1,5 +1,8 @@
 import time
+from pathlib import Path
 from urllib.parse import quote
+
+from fastapi.testclient import TestClient
 
 
 def _complete_settings(**overrides):
@@ -25,6 +28,85 @@ def test_settings_never_return_api_key(client, monkeypatch):
     assert response.status_code == 200
     assert response.json()["threatbook_api_key_configured"] is False
     assert "key" not in " ".join(response.json()).lower().replace("api_key_configured", "")
+
+
+def test_empty_database_returns_default_display_settings(client):
+    response = client.get("/api/settings")
+
+    assert response.status_code == 200
+    assert {
+        key: response.json()[key]
+        for key in ("ui_language", "theme_id", "homepage_mode", "motion_intensity")
+    } == {
+        "ui_language": "en-US",
+        "theme_id": "threatbook-red",
+        "homepage_mode": "overview",
+        "motion_intensity": "medium",
+    }
+
+
+def test_display_settings_persist_across_fresh_app_instances(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'xcheck.db'}")
+    from xcheck.config import get_settings
+    from xcheck.main import create_app
+
+    get_settings.cache_clear()
+    with TestClient(create_app()) as first_client:
+        response = first_client.put(
+            "/api/settings",
+            json={
+                "ui_language": "zh-CN",
+                "theme_id": "ocean-mist",
+                "homepage_mode": "operations",
+                "motion_intensity": "strong",
+            },
+        )
+        assert response.status_code == 200
+
+    get_settings.cache_clear()
+    with TestClient(create_app()) as second_client:
+        saved = second_client.get("/api/settings")
+
+    assert saved.status_code == 200
+    assert saved.json()["ui_language"] == "zh-CN"
+    assert saved.json()["theme_id"] == "ocean-mist"
+    assert saved.json()["homepage_mode"] == "operations"
+    assert saved.json()["motion_intensity"] == "strong"
+    get_settings.cache_clear()
+
+
+def test_invalid_display_setting_does_not_change_saved_fields(client):
+    initial = client.put(
+        "/api/settings",
+        json={
+            "ui_language": "zh-CN",
+            "theme_id": "eye-care",
+            "homepage_mode": "landscape",
+            "motion_intensity": "subtle",
+        },
+    )
+    assert initial.status_code == 200
+
+    invalid = client.put(
+        "/api/settings",
+        json={
+            "ui_language": "fr-FR",
+            "theme_id": "unknown-theme",
+            "homepage_mode": "invalid-mode",
+            "motion_intensity": "extreme",
+        },
+    )
+
+    assert invalid.status_code == 422
+    saved = client.get("/api/settings").json()
+    assert saved["ui_language"] == "zh-CN"
+    assert saved["theme_id"] == "eye-care"
+    assert saved["homepage_mode"] == "landscape"
+    assert saved["motion_intensity"] == "subtle"
 
 
 def test_ip_diagnostics_contains_source_and_stage(client):

@@ -1,4 +1,5 @@
 import time
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import AnyHttpUrl, BaseModel, Field
@@ -19,6 +20,17 @@ class SettingsUpdate(BaseModel):
     threatbook_safe_ips_per_minute: int | None = Field(default=None, ge=1, le=1000)
     threatbook_daily_budget: int | None = Field(default=None, ge=1)
     threatbook_max_retries: int | None = Field(default=None, ge=0, le=3)
+    ui_language: Literal["en-US", "zh-CN"] | None = None
+    theme_id: Literal[
+        "threatbook-red",
+        "intelligence-blue",
+        "eye-care",
+        "midnight-violet",
+        "amber-sand",
+        "ocean-mist",
+    ] | None = None
+    homepage_mode: Literal["overview", "landscape", "operations"] | None = None
+    motion_intensity: Literal["off", "subtle", "medium", "strong"] | None = None
 
 
 def _payload(settings) -> dict:
@@ -31,6 +43,10 @@ def _payload(settings) -> dict:
         "threatbook_daily_budget": settings.threatbook_daily_budget,
         "threatbook_max_retries": settings.threatbook_max_retries,
         "threatbook_api_key_configured": bool(settings.threatbook_api_key),
+        "ui_language": settings.ui_language,
+        "theme_id": settings.theme_id,
+        "homepage_mode": settings.homepage_mode,
+        "motion_intensity": settings.motion_intensity,
     }
 
 

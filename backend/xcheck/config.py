@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,6 +23,17 @@ class Settings(BaseSettings):
     threatbook_daily_budget: int = Field(default=10_000, ge=1)
     threatbook_max_retries: int = Field(default=3, ge=0, le=3)
     app_timezone: str = "Asia/Shanghai"
+    ui_language: Literal["en-US", "zh-CN"] = "en-US"
+    theme_id: Literal[
+        "threatbook-red",
+        "intelligence-blue",
+        "eye-care",
+        "midnight-violet",
+        "amber-sand",
+        "ocean-mist",
+    ] = "threatbook-red"
+    homepage_mode: Literal["overview", "landscape", "operations"] = "overview"
+    motion_intensity: Literal["off", "subtle", "medium", "strong"] = "medium"
 
 
 @lru_cache

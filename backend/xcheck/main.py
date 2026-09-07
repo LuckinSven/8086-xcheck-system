@@ -32,7 +32,9 @@ def create_app() -> FastAPI:
                     continue
                 current = getattr(settings, saved.key)
                 value = saved.value
-                if isinstance(current, int):
+                if isinstance(current, bool):
+                    value = value.lower() in {"1", "true", "yes", "on"}
+                elif isinstance(current, int):
                     value = int(value)
                 setattr(settings, saved.key, value)
         app.state.engine = engine
