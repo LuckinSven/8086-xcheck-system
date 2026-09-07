@@ -20,32 +20,56 @@ const loading = ref(true)
 const refreshing = ref(false)
 const error = ref('')
 let timer: ReturnType<typeof setInterval> | undefined
+let requestVersion = 0
+let activeMode: string | null = null
 
 const mode = computed(() => uiSettings.homepage_mode)
 const modeTitle = computed(() => t(`settings.homeModes.${mode.value}`))
 
 async function load(silent = false) {
+  const requestedMode = mode.value
+  if (silent && activeMode === requestedMode) return
+  const version = ++requestVersion
+  activeMode = requestedMode
   if (silent) refreshing.value = true
   else loading.value = true
   error.value = ''
   try {
-    dashboard.value = await api.get<DashboardPayload>(`/api/dashboard?mode=${mode.value}`)
+    const result = await api.get<DashboardPayload>(`/api/dashboard?mode=${requestedMode}`)
+    if (version === requestVersion && mode.value === requestedMode) dashboard.value = result
   } catch (reason) {
-    if (!silent || !dashboard.value) error.value = translateApiError(reason, t)
+    if (version === requestVersion && (!silent || !dashboard.value)) {
+      error.value = translateApiError(reason, t)
+    }
   } finally {
-    loading.value = false
-    refreshing.value = false
+    if (version === requestVersion) {
+      activeMode = null
+      loading.value = false
+      refreshing.value = false
+    }
   }
 }
 
-watch(mode, () => load(), { immediate: true })
+watch(mode, () => {
+  dashboard.value = null
+  load()
+}, { immediate: true })
+
+function handleVisibilityChange() {
+  if (!document.hidden) load(true)
+}
 
 onMounted(() => {
-  timer = setInterval(() => load(true), 15_000)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  timer = setInterval(() => {
+    if (!document.hidden) load(true)
+  }, 15_000)
 })
 
 onUnmounted(() => {
+  requestVersion += 1
   if (timer) clearInterval(timer)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 

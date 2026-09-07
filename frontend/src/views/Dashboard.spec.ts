@@ -1,10 +1,12 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { uiSettings } from '../ui-settings'
 import Dashboard from './Dashboard.vue'
 
 const apiMock = vi.hoisted(() => ({ get: vi.fn() }))
+
+enableAutoUnmount(afterEach)
 
 vi.mock('../api', () => ({
   api: apiMock,
@@ -32,7 +34,10 @@ describe('Dashboard', () => {
     apiMock.get.mockReset()
   })
 
-  afterEach(() => vi.useRealTimers())
+  afterEach(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+    vi.useRealTimers()
+  })
 
   it('renders the bounded overview and refreshes it without changing routes', async () => {
     apiMock.get.mockResolvedValue({
@@ -128,5 +133,62 @@ describe('Dashboard', () => {
     await wrapper.get('[data-action="retry-dashboard"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-dashboard="overview"]').exists()).toBe(true)
+  })
+
+  it('pauses polling while hidden and refreshes when the page becomes visible', async () => {
+    apiMock.get.mockResolvedValue({
+      ...base,
+      mode: 'overview',
+      summary: { total_tasks: 0, total_unique_ips: 0, malicious_ips: 0, active_tasks: 0, failed_tasks: 0 },
+      sections: {
+        trend: { available: true, items: [] }, recent_risks: { available: true, items: [] },
+        attention: { available: true, items: [] },
+      },
+    })
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true })
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(apiMock.get).toHaveBeenCalledTimes(1)
+
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(apiMock.get).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('ignores a stale response when the configured home mode changes', async () => {
+    let resolveOverview!: (value: unknown) => void
+    const overview = new Promise((resolve) => { resolveOverview = resolve })
+    apiMock.get.mockImplementation((path: string) => path.endsWith('overview')
+      ? overview
+      : Promise.resolve({
+          ...base,
+          mode: 'landscape',
+          summary: { malicious_last_24h: 3, total_malicious: 8, affected_countries: 1 },
+          sections: {
+            countries: { available: true, items: [] }, regions: { available: true, items: [] },
+            labels: { available: true, items: [] }, severities: { available: true, items: [] },
+            trend: { available: true, items: [] },
+          },
+        }))
+    const wrapper = mountDashboard()
+    uiSettings.homepage_mode = 'landscape'
+    await flushPromises()
+    resolveOverview({
+      ...base,
+      mode: 'overview',
+      summary: { total_tasks: 99, total_unique_ips: 99, malicious_ips: 99, active_tasks: 0, failed_tasks: 0 },
+      sections: {
+        trend: { available: true, items: [] }, recent_risks: { available: true, items: [] },
+        attention: { available: true, items: [] },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-dashboard="landscape"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('99')
   })
 })
