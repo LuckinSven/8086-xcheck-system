@@ -140,6 +140,12 @@ curl --fail http://127.0.0.1:8086/api/health
 
 更多说明参见 [docs/operations.md](docs/operations.md)。
 
+## 支持与安全报告
+
+可通过 [GitHub Issues](https://github.com/LuckinSven/8086-xcheck-system/issues) 反馈可复现缺陷、文档问题和范围明确的功能建议。建议提供 XCheck 版本、部署方式、复现步骤、预期行为、实际行为以及已脱敏的诊断信息。
+
+请勿在公开 Issue 中提交 API Key、`.env` 内容、上传日志、数据库文件、备份或其他敏感业务数据。如果怀疑存在安全漏洞，请仅公开不含敏感细节的摘要，并先请求建立私下沟通渠道，再披露技术细节。
+
 ## 开源协议
 
 项目采用 [Apache License 2.0](LICENSE)，归属和第三方服务说明参见 [NOTICE](NOTICE)。

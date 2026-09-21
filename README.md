@@ -140,6 +140,12 @@ Use `XCHECK_IMAGE_TAG=v0.1.0 docker compose up -d --no-build` to pin a specific 
 
 Additional operational notes are available in [docs/operations.md](docs/operations.md) (Chinese).
 
+## Support and security reports
+
+Use [GitHub Issues](https://github.com/LuckinSven/8086-xcheck-system/issues) for reproducible bugs, documentation problems, and focused feature requests. Include the XCheck version, deployment method, reproduction steps, expected behavior, actual behavior, and sanitized diagnostics when available.
+
+Never post API keys, `.env` contents, uploaded logs, database files, backups, or other sensitive operational data in a public issue. For a suspected security vulnerability, share only a non-sensitive summary publicly and request private coordination before disclosing technical details.
+
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution and third-party service information.
